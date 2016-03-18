@@ -37,6 +37,7 @@ let active_procedure_checkers () =
         RepeatedCallsChecker.callback_check_repeated_calls, checkers_enabled;
         PrintfArgs.callback_printf_args, checkers_enabled;
         PerformanceCritical.callback_performance_checker, checkers_enabled;
+				AndroidEnergyCheckers.callback_check_internal_acessors, checkers_enabled;
       ] in
     IList.map (fun (x, y) -> (x, y, Some Config.Java)) l in
   let c_cpp_checkers =
