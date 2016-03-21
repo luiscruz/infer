@@ -13,7 +13,7 @@ let callback_check_internal_acessors { Callbacks.proc_desc; proc_name; idenv } =
 			if  
 				Sil.exp_is_this arg1_exp
 				&& (((PatternMatch.is_getter pn) && ((IList.length args) = 1)) || (PatternMatch.is_setter pn && ((IList.length args) = 2)) )
-				&& (arg1_class = (Procname.java_get_class pn) )
+				&& (arg1_class = (Procname.java_get_class_name pn) )
 			then
         let description =
           Printf.sprintf "call to internal accessor method %s" (Procname.java_get_method pn) in
