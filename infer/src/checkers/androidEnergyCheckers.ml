@@ -105,7 +105,10 @@ let callback_check_static_method_candidates { Callbacks.proc_desc; proc_name;get
 						in
 						not (
 							(Sil.exp_is_this arg1_exp) && (* also skips static method calls - they never have _this_*)
-							(arg1_class = (Procname.java_get_class_name pn_java))
+							(
+								(arg1_class = (Procname.java_get_class_name pn_java)) ||
+								(PatternMatch.type_has_direct_supertype arg1_typ (Typename.Java.from_string (Procname.java_get_class_name pn_java))) 
+							)
 						)
 					| _ -> true)
 	    | Sil.Nullify _
