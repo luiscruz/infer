@@ -48,7 +48,7 @@ let callback_check_internal_acessors { Callbacks.proc_desc; proc_name;get_proc_d
 module L = Logging
 
 				
-let callback_check_static_method_candidates { Callbacks.proc_desc; proc_name;get_proc_desc; idenv } =
+let callback_check_static_method_candidates { Callbacks.proc_desc; proc_name;get_proc_desc; idenv; tenv } =
 		let procname_has_class procname classname = match procname with
 		| Procname.Java pn_java -> (Procname.java_get_class_name pn_java) = classname
 		| _ -> false
@@ -59,7 +59,10 @@ let callback_check_static_method_candidates { Callbacks.proc_desc; proc_name;get
 			| _ -> false
 		in
 		
-	  let rec is_static_candidate_do_exp  = function
+	  let rec is_static_candidate_do_exp  exp = 
+			if Sil.exp_is_this exp then
+				false
+			else match exp with
 	    | Sil.Var _ -> true
 	    | Sil.UnOp (_, e, _) ->
 	        is_static_candidate_do_exp  e
@@ -84,7 +87,8 @@ let callback_check_static_method_candidates { Callbacks.proc_desc; proc_name;get
 	        is_static_candidate_do_exp e1 &&
 	        is_static_candidate_do_exp e2
 	    | Sil.Sizeof _ -> true
-			| _ -> true in
+			| _ -> true
+		in
 	  let instr_is_static = function
 	    | Sil.Letderef (_, e, _, _) ->
 	        is_static_candidate_do_exp e
@@ -97,7 +101,7 @@ let callback_check_static_method_candidates { Callbacks.proc_desc; proc_name;get
 	        is_static_candidate_do_exp e &&
 	        IList.fold_left (fun acc (e, _) -> acc &&(is_static_candidate_do_exp e)) true etl &&
 					(match function_call_instruction with
-					| Sil.Call(_, Sil.Const (Sil.Cfun ((Java pn_java)as pn)), ((_arg1_exp,arg1_typ)::_ as args), loc, _) -> 
+					| Sil.Call(_, Sil.Const (Sil.Cfun ((Java pn_java)as pn)), ((_arg1_exp,arg1_typ)::_ as args), loc, _) ->  (* TODO: skip override methods *)
 						let arg1_exp = Idenv.expand_expr idenv _arg1_exp in
 						let arg1_class =  match (PatternMatch.type_get_class_name arg1_typ) with
 							| Some mangled_class_name -> Mangled.to_string mangled_class_name
@@ -117,8 +121,17 @@ let callback_check_static_method_candidates { Callbacks.proc_desc; proc_name;get
 	    | Sil.Stackop _
 	    | Sil.Declare_locals _
 	    | Sil.Goto_node _ ->
-	        true in
-		if not (Procname.java_is_static proc_name) then			
+	        true
+			in
+      let is_override pname = (*Todo: this is not efficient -- fold approach should be used*)
+				let proc_is_overriding = ref false
+				in
+        PatternMatch.proc_iter_overridden_methods (fun _ -> proc_is_overriding:=true) tenv pname;
+				!proc_is_overriding
+			in
+		if not (Procname.java_is_static proc_name) &&
+			(not (is_override proc_name))
+		then			
 			let method_should_be_static = 
 				Cfg.Procdesc.fold_instrs (fun acc _ instr -> (acc && (instr_is_static instr))) true proc_desc
 			in
