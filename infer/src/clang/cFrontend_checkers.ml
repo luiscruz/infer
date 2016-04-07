@@ -29,7 +29,7 @@ type warning_desc = {
 
 (* Helper functions *)
 
-let property_name_contains_word pname word =
+let name_contains_word pname word =
   let rexp = Str.regexp_string_case_fold word in
   try
     Str.search_forward rexp pname.Clang_ast_t.ni_name 0 >= 0
@@ -44,11 +44,51 @@ let location_from_dinfo info =
 let proc_name_from_context context =
   Cfg.Procdesc.get_proc_name (CContext.get_procdesc context)
 
+let rec is_self s =
+  let open Clang_ast_t in
+  match s with
+  | ImplicitCastExpr(_, [s], _, _) -> is_self s
+  | DeclRefExpr(_, _, _, dr) ->
+      (match dr.drti_decl_ref with
+       | Some decl_ref ->
+           (match decl_ref.dr_name with
+            | Some n -> n.ni_name = CFrontend_config.self
+            | _ -> false)
+       | _ -> false)
+  | _ -> false
+
+(* Call method m and on the pn parameter pred holds *)
+(* st |= call_method(m(p1,...,pn,...pk)) /\ pred(pn) *)
+let call_method_on_nth pred pn m st =
+  match st with
+  | Clang_ast_t.ObjCMessageExpr (_, params, _, omei) when omei.omei_selector = m ->
+      (try
+         let p = IList.nth params pn in
+         pred p
+       with _ -> false)
+  | _ -> false
+
+(* st |= EF (atomic_pred param) *)
+let rec exists_eventually_st atomic_pred param  st =
+  if atomic_pred param st then true
+  else
+    let _, st_list = Clang_ast_proj.get_stmt_tuple st in
+    IList.exists (exists_eventually_st atomic_pred param) st_list
+
+let dec_body_eventually atomic_pred param dec =
+  match dec with
+  | Clang_ast_t.ObjCMethodDecl (_, _, omdi) ->
+      (match omdi.Clang_ast_t.omdi_body with
+       | Some body -> exists_eventually_st atomic_pred param body
+       | _ -> false)
+  | _ -> false
+
 (* === Warnings on properties === *)
 
 (* Strong Delegate Warning: a property with name delegate should not be declared strong *)
 let strong_delegate_warning decl_info pname obj_c_property_decl_info =
-  let condition = property_name_contains_word pname "delegate"
+  let condition = (name_contains_word pname "delegate")
+                  && not (name_contains_word pname "queue")
                   && ObjcProperty_decl.is_strong_property obj_c_property_decl_info in
   if condition then
     Some { name = "STRONG_DELEGATE_WARNING";
@@ -68,7 +108,7 @@ let direct_atomic_property_access_warning context stmt_info ivar_name =
         Ast_utils.get_class_name_from_member n
     | _ -> Ident.create_fieldname (Mangled.from_string "") 0, "" in
   let tname = Typename.TN_csu (Csu.Class Csu.Objc, Mangled.from_string cname) in
-  let condition = match Sil.tenv_lookup tenv tname with
+  let condition = match Tenv.lookup tenv tname with
     | Some { Sil.instance_fields; static_fields } ->
         (* We give the warning when:
              (1) the property has the atomic attribute and
@@ -100,7 +140,7 @@ let captured_cxx_ref_in_objc_block_warning stmt_info captured_vars =
     | _ -> false in
   let capt_refs = IList.filter is_cxx_ref captured_vars in
   let pvar_descs =
-    IList.fold_left (fun s (v, _)  -> s ^ " '" ^ (Sil.pvar_to_string v) ^ "' ") "" capt_refs in
+    IList.fold_left (fun s (v, _)  -> s ^ " '" ^ (Pvar.to_string v) ^ "' ") "" capt_refs in
   (* Fire if the list of captured references is not empty *)
   let condition = IList.length capt_refs > 0 in
   if condition then
@@ -111,4 +151,28 @@ let captured_cxx_ref_in_objc_block_warning stmt_info captured_vars =
       suggestion = "C++ References are unmanaged and may be invalid " ^
                    "by the time the block executes.";
       loc = location_from_sinfo stmt_info; }
+  else None
+
+
+(* exist m1:  m1.body|- EF call_method(addObserver:) => exists m2 : m2.body |- EF call_method(removeObserver:) *)
+let checker_NSNotificationCenter decl_info decls =
+  let exists_method_calling_addObserver =
+    IList.exists (dec_body_eventually (call_method_on_nth is_self 1) "addObserver:selector:name:object:") decls in
+  let exists_method_calling_addObserverForName =
+    IList.exists (dec_body_eventually (call_method_on_nth is_self 1) "addObserverForName:object:queue:usingBlock:") decls in
+  let eventually_addObserver = exists_method_calling_addObserver
+                               || exists_method_calling_addObserverForName in
+  let exists_method_calling_removeObserver =
+    IList.exists (dec_body_eventually (call_method_on_nth is_self 1) "removeObserver:") decls in
+  let exists_method_calling_removeObserverName =
+    IList.exists (dec_body_eventually (call_method_on_nth is_self 1) "removeObserver:name:object:") decls in
+  let eventually_removeObserver = exists_method_calling_removeObserver
+                                  || exists_method_calling_removeObserverName in
+  let condition = eventually_addObserver && (not eventually_removeObserver) in
+  if condition then
+    Some {
+      name = Localise.to_string (Localise.registered_observer_being_deallocated);
+      description = Localise.registered_observer_being_deallocated_str CFrontend_config.self;
+      suggestion =  "Consider removing the object from the notification center before its deallocation.";
+      loc = location_from_dinfo decl_info; }
   else None

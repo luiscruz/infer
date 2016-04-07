@@ -10,9 +10,6 @@
 module F = Format
 module L = Logging
 
-open AbstractDomain
-open TransferFunctions
-
 (** utilities for writing abstract domains/transfer function tests *)
 
 (** structured language that makes it easy to write small test programs in OCaml *)
@@ -63,8 +60,11 @@ module StructuredSil = struct
   let invariant inv_str =
     Invariant (inv_str, fresh_label ())
 
+  let pvar_of_str str =
+    Pvar.mk (Mangled.from_string str) dummy_procname
+
   let var_of_str str =
-    Sil.Lvar (Sil.mk_pvar (Mangled.from_string str) dummy_procname)
+    Sil.Lvar (pvar_of_str str)
 
   let ident_of_str str =
     Ident.create_normal (Ident.string_to_name str) 0
@@ -72,44 +72,59 @@ module StructuredSil = struct
   let unknown_exp =
     var_of_str "__unknown__"
 
-  let make_letderef lhs_id rhs_exp =
-    Cmd (Sil.Letderef (lhs_id, rhs_exp, dummy_typ, dummy_loc))
+  let make_letderef ~rhs_typ lhs_id rhs_exp =
+    Cmd (Sil.Letderef (lhs_id, rhs_exp, rhs_typ, dummy_loc))
 
-  let make_set ~lhs_exp ~rhs_exp =
-    Cmd (Sil.Set (lhs_exp, dummy_typ, rhs_exp, dummy_loc))
+  let make_set ~rhs_typ ~lhs_exp ~rhs_exp =
+    Cmd (Sil.Set (lhs_exp, rhs_typ, rhs_exp, dummy_loc))
 
-  let id_assign_id lhs rhs =
+  let make_call ?(procname=dummy_procname) ret_ids args =
+    let call_exp = Sil.Const (Sil.Cfun procname) in
+    Cmd (Sil.Call (ret_ids, call_exp, args, dummy_loc, Sil.cf_default))
+
+  let id_assign_id ?(rhs_typ=dummy_typ) lhs rhs =
     let lhs_id = ident_of_str lhs in
     let rhs_exp = Sil.Var (ident_of_str rhs) in
-    make_letderef lhs_id rhs_exp
+    make_letderef ~rhs_typ lhs_id rhs_exp
 
-  let id_assign_var lhs rhs =
+  let id_assign_var ?(rhs_typ=dummy_typ) lhs rhs =
     let lhs_id = ident_of_str lhs in
     let rhs_exp = var_of_str rhs in
-    make_letderef lhs_id rhs_exp
+    make_letderef ~rhs_typ lhs_id rhs_exp
+
+  let var_assign_exp ~rhs_typ lhs rhs_exp =
+    let lhs_exp = var_of_str lhs in
+    make_set ~rhs_typ ~lhs_exp ~rhs_exp
 
   let var_assign_int lhs rhs =
-    let lhs_exp = var_of_str lhs in
     let rhs_exp = Sil.exp_int (Sil.Int.of_int rhs) in
-    make_set ~lhs_exp ~rhs_exp
+    let rhs_typ = Sil.Tint Sil.IInt in
+    var_assign_exp ~rhs_typ lhs rhs_exp
 
-  let var_assign_id lhs rhs =
+  let var_assign_id ?(rhs_typ=dummy_typ) lhs rhs =
     let lhs_exp = var_of_str lhs in
     let rhs_exp = Sil.Var (ident_of_str rhs) in
-    make_set ~lhs_exp ~rhs_exp
+    make_set ~rhs_typ ~lhs_exp ~rhs_exp
 
-  let var_assign_var lhs rhs =
+  let var_assign_var ?(rhs_typ=dummy_typ) lhs rhs =
     let lhs_exp = var_of_str lhs in
     let rhs_exp = var_of_str rhs in
-    make_set ~lhs_exp ~rhs_exp
+    make_set ~rhs_typ ~lhs_exp ~rhs_exp
 
+  let call_unknown ret_id_strs arg_strs =
+    let args = IList.map (fun param_str -> (var_of_str param_str, dummy_typ)) arg_strs in
+    let ret_ids = IList.map ident_of_str ret_id_strs in
+    make_call ret_ids args
+
+  let call_unknown_no_ret arg_strs =
+    call_unknown [] arg_strs
 end
 
 module Make
     (C : ProcCfg.Wrapper with type node = Cfg.Node.t)
     (S : Scheduler.S)
-    (A : AbstractDomain)
-    (T : TransferFunctions with type astate = A.astate) = struct
+    (A : AbstractDomain.S)
+    (T : TransferFunctions.S with type astate = A.astate) = struct
 
   open StructuredSil
 
@@ -166,10 +181,11 @@ module Make
           set_succs loop_body_end_node [loop_head_join_node];
           set_succs false_prune_node [loop_exit_node];
           loop_exit_node, assert_map'
-      | Invariant (inv_str, inv_label)  ->
-          let n_id = C.node_id last_node in
+      | Invariant (inv_str, inv_label) ->
+          let node = create_node (Cfg.Node.Stmt_node "Invariant") [] in
+          set_succs last_node [node];
           (* add the assertion to be checked after analysis converges *)
-          last_node, M.add n_id (inv_str, inv_label) assert_map
+          node, M.add (C.node_id node) (inv_str, inv_label) assert_map
     and structured_instrs_to_node last_node assert_map instrs =
       IList.fold_left
         (fun acc instr -> structured_instr_to_node acc instr) (last_node, assert_map) instrs in

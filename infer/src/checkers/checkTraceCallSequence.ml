@@ -230,8 +230,8 @@ module BooleanVars = struct
 
   (** Check if the expression exp is one of the listed boolean variables. *)
   let exp_boolean_var exp = match exp with
-    | Sil.Lvar pvar when Sil.pvar_is_local pvar ->
-        let name = Mangled.to_string (Sil.pvar_get_name pvar) in
+    | Sil.Lvar pvar when Pvar.is_local pvar ->
+        let name = Mangled.to_string (Pvar.get_name pvar) in
         if IList.mem string_equal name boolean_variables
         then Some name
         else None
@@ -300,7 +300,7 @@ end
 
 
 (** State transformation for a cfg node. *)
-let do_node pn pd idenv node (s : State.t) : (State.t list) * (State.t list) =
+let do_node pn pd idenv _ node (s : State.t) : (State.t list) * (State.t list) =
   if verbose then L.stderr "N:%d S:%s@." (Cfg.Node.get_id node) (State.to_string s);
 
   let curr_state = ref s in
@@ -321,7 +321,7 @@ let check_final_state proc_name proc_desc exit_node final_s =
 (** Check that the trace calls are balanced.
     This is done by using the most general control flow including exceptions.
     The begin() and end() function are assumed not to throw exceptions. *)
-let callback_check_trace_call_sequence { Callbacks.proc_desc; proc_name; idenv } : unit =
+let callback_check_trace_call_sequence { Callbacks.proc_desc; proc_name; idenv; tenv } : unit =
 
   let module DFTrace = MakeDF(struct
       type t = State.t
@@ -337,7 +337,7 @@ let callback_check_trace_call_sequence { Callbacks.proc_desc; proc_name; idenv }
   let do_check () =
     begin
       if verbose then L.stderr "@.--@.PROC: %a@." Procname.pp proc_name;
-      let transitions = DFTrace.run proc_desc State.balanced in
+      let transitions = DFTrace.run tenv proc_desc State.balanced in
       let exit_node = Cfg.Procdesc.get_exit_node proc_desc in
       match transitions exit_node with
       | DFTrace.Transition (final_s, _, _) ->

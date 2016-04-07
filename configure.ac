@@ -10,12 +10,14 @@ dnl of patent rights can be found in the PATENTS file in the same directory.
 
 AC_PREREQ([2.63])
 
-# WARNING: AC_INIT only accepts string literals so the version number
-# has to be kept in sync with below
+# WARNING: the version number has to be kept in sync with:
+# - the values below
+# - opam
+# - docker/Dockerfile
 AC_INIT([Infer],
         [0.8.0],
         [https://github.com/facebook/infer/issues/])
-AC_CONFIG_SRCDIR([infer/src/backend/sil.ml])
+AC_CONFIG_SRCDIR([infer/src/IR/sil.ml])
 
 # WARNING: keep in sync with above
 INFER_MAJOR=0
@@ -26,13 +28,15 @@ AC_SUBST([INFER_MAJOR])
 AC_SUBST([INFER_MINOR])
 AC_SUBST([INFER_PATCH])
 
-# record if we are in a release of Infer
-AC_MSG_CHECKING([if we are in an Infer release build])
-is_infer_release=no
-AS_IF([test -f ".release"], [is_infer_release=yes])
-INFER_IS_RELEASE=$is_infer_release
-AC_SUBST([INFER_IS_RELEASE])
-AC_MSG_RESULT([$is_infer_release])
+# are we in a release source tree
+AC_CHECK_FILE([.release], [is_release_tree=yes], [is_release_tree=no])
+IS_RELEASE_TREE=$is_release_tree
+AC_SUBST([IS_RELEASE_TREE])
+
+# are we in an internal source tree
+AC_CHECK_FILE([.facebook], [is_facebook_tree=yes], [is_facebook_tree=no])
+IS_FACEBOOK_TREE=$is_facebook_tree
+AC_SUBST([IS_FACEBOOK_TREE])
 
 # to compile the facebook-clang-plugins
 AC_ARG_VAR([CLANG_PREFIX], [directory where clang is installed (defaults=$PWD/facebook-clang-plugins/clang)])
@@ -67,7 +71,7 @@ AC_ARG_WITH(fcp-clang,
   AS_HELP_STRING([--without-fcp-clang],
     [do not use $CLANG_PREFIX/bin/clang to override the default compiler (default is to override if in an infer release)]),
   ,
-  with_fcp_clang=$is_infer_release)
+  with_fcp_clang=$is_release_tree)
 
 AS_IF([test "x$enable_c_analyzers" = "xyes"], [
   AC_MSG_CHECKING([whether to use the compilers in $CLANG_PREFIX/bin])
@@ -106,6 +110,7 @@ AC_PROG_AWK
 AC_PROG_INSTALL
 AC_PROG_LN_S
 AC_PROG_MAKE_SET
+AC_PROG_MKDIR_P
 
 if test "x$enable_c_analyzers" = "xyes"; then
   AC_PROG_CPP
@@ -221,6 +226,38 @@ AC_ARG_ENABLE(ocaml-bin-annot,
   enable_ocaml_bin_annot=yes)
 ENABLE_OCAML_BINANNOT=$enable_ocaml_bin_annot
 AC_SUBST([ENABLE_OCAML_BINANNOT])
+
+
+# We use Buck to run the Infer tests
+AC_MSG_CHECKING([which version of Buck to use])
+buckversion_file=.buckversion
+oss_buck_version=a965937ccdadf8119a98ab766c3feb0708dc424e
+fb_buck_version=440619c312cf07951891083d8f02d05a713205b5
+AS_IF([test x"$is_facebook_tree" = x"yes"],
+  [buck_version=$fb_buck_version],
+  [buck_version=$oss_buck_version])
+echo $buck_version > "$buckversion_file"
+AC_MSG_RESULT([$buck_version])
+
+
+AC_CHECK_TOOL([HAVE_NPROC], [nproc], [no])
+AC_CHECK_TOOL([HAVE_SYSCTL], [sysctl], [no])
+AC_MSG_CHECKING([the number of cpus the build host has])
+if test "$HAVE_NPROC" != "no"; then
+  if test $(nproc); then
+    NCPU=$(nproc)
+    AC_MSG_RESULT([$NCPU])
+  fi
+elif test $"HAVE_SYSCTL" != "no"; then
+  if test $(sysctl -n hw.ncpu); then
+    NCPU=$(sysctl -n hw.ncpu)
+    AC_MSG_RESULT([$NCPU])
+  fi
+else
+  NCPU=1
+  AC_MSG_RESULT([failed, defaulting to 1])
+fi
+AC_SUBST([NCPU])
 
 
 AC_CONFIG_FILES([

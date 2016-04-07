@@ -199,6 +199,9 @@ let reactive_mode = ref false
     If a procedure was changed beforehand, keep the changed marking. *)
 let continue_capture = ref false
 
+(** Merge the captured results directories specified in the dependency file *)
+let merge = ref false
+
 (** Flag for footprint discovery mode *)
 let footprint = ref true
 
@@ -409,3 +412,5 @@ let string_of_language = function
   | C_CPP -> "C_CPP"
 
 let show_progress_bar = ref true
+
+let nsnotification_center_checker_backend = ref false

@@ -8,10 +8,10 @@
  *)
 
 
-module type TransferFunctions = sig
+module type S = sig
   type astate
 
-  (* {A} instr {A'} *)
-  val exec_instr : astate -> Sil.instr -> astate
+  (* {A} instr {A'}. [caller_pdesc] is the procdesc of the current procedure *)
+  val exec_instr : astate -> Cfg.Procdesc.t -> Sil.instr -> astate
 
 end

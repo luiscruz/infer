@@ -10,54 +10,35 @@
 
 (** Symbolic Execution *)
 
-(** print the builtin functions and exit *)
-val print_builtins : unit -> unit
+(** Symbolic execution of the instructions of a node, lifted to sets of propositions. *)
+val node : (exn -> unit) -> Tenv.t -> Cfg.Node.t -> Paths.PathSet.t -> Paths.PathSet.t
 
-(** Check if the function is a builtin *)
-val function_is_builtin : Procname.t -> bool
+(** Symbolic execution of a sequence of instructions.
+    If errors occur and [mask_errors] is true, just treat as skip. *)
+val instrs :
+  ?mask_errors:bool -> Tenv.t -> Cfg.Procdesc.t -> Sil.instr list ->
+  (Prop.normal Prop.t * Paths.Path.t) list -> (Prop.normal Prop.t * Paths.Path.t) list
 
-(** symbolic execution on the level of sets of propositions *)
-val lifted_sym_exec : (exn -> unit) -> Sil.tenv -> Cfg.Procdesc.t ->
-  Paths.PathSet.t -> Cfg.Node.t -> Sil.instr list -> Paths.PathSet.t
+(** Symbolic execution of the divergent pure computation. *)
+val diverge : Prop.normal Prop.t -> Paths.Path.t -> (Prop.normal Prop.t * Paths.Path.t) list
+
+val proc_call : Specs.summary -> Builtin.t
+
+val unknown_or_scan_call : is_scan:bool -> Sil.typ option -> Builtin.t
+
+val check_variadic_sentinel : ?fails_on_nil:bool -> int -> int * int -> Builtin.t
+
+val check_untainted :
+  Sil.exp -> Procname.t -> Procname.t -> Prop.normal Prop.t -> Prop.normal Prop.t
+
+(** Check for arithmetic problems and normalize an expression. *)
+val check_arith_norm_exp :
+  Procname.t -> Sil.exp -> Prop.normal Prop.t -> Sil.exp * Prop.normal Prop.t
+
+val prune : positive:bool -> Sil.exp -> Prop.normal Prop.t -> Propset.t
 
 (** OO method resolution: given a class name and a method name, climb the class hierarchy to find
- * the procname that the method name will actually resolve to at runtime. For example, if we have
- * a procname like Foo.toString() and Foo does not override toString(), we must resolve the call to
- * toString(). We will end up with Super.toString() where Super is some superclass of Foo. *)
-val resolve_method : Sil.tenv -> Typename.t -> Procname.t -> Procname.t
-(** {2 Functions for handling builtins } *)
-
-module ModelBuiltins : sig
-  val __assert_fail : Procname.t
-  val __delete : Procname.t
-  val __delete_array : Procname.t
-  val __exit : Procname.t
-  val __get_array_size : Procname.t
-  val __get_type_of : Procname.t
-  val __infer_fail : Procname.t
-  val __instanceof : Procname.t (** [__instanceof(val,typ)] implements java's [val instanceof typ] *)
-  val __cast : Procname.t (** [__cast(val,typ)] implements java's [typ(val)] *)
-  val __placement_delete : Procname.t
-  val __placement_new : Procname.t
-  val __new : Procname.t
-  val __new_array : Procname.t
-  val __objc_alloc : Procname.t
-  val __objc_alloc_no_fail : Procname.t
-  val __set_array_size : Procname.t
-  val __unwrap_exception : Procname.t
-  val __set_file_attribute : Procname.t
-  val __set_mem_attribute : Procname.t
-  val __set_locked_attribute : Procname.t
-  val __set_unlocked_attribute : Procname.t
-  val __infer_assume : Procname.t
-  val __objc_retain : Procname.t
-  val __objc_release : Procname.t
-  val __objc_retain_cf : Procname.t
-  val __objc_release_cf : Procname.t
-  val __set_autorelease_attribute : Procname.t
-  val __objc_release_autorelease_pool : Procname.t
-  val __objc_cast : Procname.t
-  val __objc_dictionary_literal : Procname.t
-  val __cxx_typeid : Procname.t
-  val malloc_no_fail : Procname.t
-end
+    the procname that the method name will actually resolve to at runtime. For example, if we have a
+    procname like Foo.toString() and Foo does not override toString(), we must resolve the call to
+    toString(). We will end up with Super.toString() where Super is some superclass of Foo. *)
+val resolve_method : Tenv.t -> Typename.t -> Procname.t -> Procname.t

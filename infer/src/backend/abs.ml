@@ -408,7 +408,7 @@ let typ_get_recursive_flds tenv typ_exp =
     match t with
     | Sil.Tvar _ | Sil.Tint _ | Sil.Tfloat _ | Sil.Tvoid | Sil.Tfun _ -> false
     | Sil.Tptr (Sil.Tvar tname', _) ->
-        let typ' = match Sil.tenv_lookup tenv tname' with
+        let typ' = match Tenv.lookup tenv tname' with
           | None ->
               L.err "@.typ_get_recursive: Undefined type %s@." (Typename.to_string tname');
               t
@@ -419,7 +419,7 @@ let typ_get_recursive_flds tenv typ_exp =
   in
   match typ_exp with
   | Sil.Sizeof (typ, _) ->
-      (match Sil.expand_type tenv typ with
+      (match Tenv.expand_type tenv typ with
        | Sil.Tint _ | Sil.Tvoid | Sil.Tfun _ | Sil.Tptr _ | Sil.Tfloat _ -> []
        | Sil.Tstruct { Sil.instance_fields } ->
            IList.map (fun (x, _, _) -> x) (IList.filter (filter typ) instance_fields)
@@ -950,7 +950,7 @@ let get_var_retain_cycle _prop =
     | Sil.Hpointsto (e, _, Sil.Sizeof(typ, _)), Sil.Eexp (e', _)
       when Sil.exp_equal e e' && Sil.is_block_type typ -> true
     | _, _ -> false in
-  let find_pvar v =
+  let find v =
     try
       let hp = IList.find (is_pvar v) sigma in
       Some (Sil.hpred_get_lhs hp)
@@ -960,8 +960,8 @@ let get_var_retain_cycle _prop =
       Some (Sil.Lvar Sil.block_pvar)
     else None in
   let sexp e = Sil.Eexp (e, Sil.Inone) in
-  let find_pvar_or_block ((e, t), f, e') =
-    match find_pvar e with
+  let find_or_block ((e, t), f, e') =
+    match find e with
     | Some pvar -> [((sexp pvar, t), f, e')]
     | _ -> (match find_block e with
         | Some blk -> [((sexp blk, t), f, e')]
@@ -976,7 +976,7 @@ let get_var_retain_cycle _prop =
     | hp:: sigma' ->
         let cycle = get_cycle hp _prop in
         L.d_strln "Filtering pvar in cycle ";
-        let cycle' = IList.flatten (IList.map find_pvar_or_block cycle) in
+        let cycle' = IList.flatten (IList.map find_or_block cycle) in
         if cycle' = [] then do_sigma sigma'
         else cycle' in
   do_sigma sigma
@@ -1024,8 +1024,8 @@ let check_observer_is_unsubscribed_deallocation prop e =
   match Prop.get_observer_attribute prop e with
   | Some Sil.Aobserver ->
       (match pvar_opt with
-       |  Some pvar ->
-           L.d_strln (" ERROR: Object " ^ (Sil.pvar_to_string pvar) ^
+       |  Some pvar when !Config.nsnotification_center_checker_backend ->
+           L.d_strln (" ERROR: Object " ^ (Pvar.to_string pvar) ^
                       " is being deallocated while still registered in a notification center");
            let desc = Localise.desc_registered_observer_being_deallocated pvar loc in
            raise (Exceptions.Registered_observer_being_deallocated (desc, __POS__))
@@ -1106,7 +1106,8 @@ let check_junk ?original_prop pname tenv prop =
               let ml_bucket_opt =
                 match resource with
                 | Sil.Rmemory Sil.Mobjc -> should_raise_objc_leak hpred
-                | Sil.Rmemory Sil.Mnew when !Config.curr_language = Config.C_CPP ->
+                | Sil.Rmemory Sil.Mnew | Sil.Rmemory Sil.Mnew_array
+                  when !Config.curr_language = Config.C_CPP ->
                     Mleak_buckets.should_raise_cpp_leak ()
                 | _ -> None in
               let exn_retain_cycle cycle =
@@ -1133,7 +1134,8 @@ let check_junk ?original_prop pname tenv prop =
                        (cycle_has_weak_or_unretained_or_assign_field cycle) in
                      ignore_cycle, exn_retain_cycle cycle
                  | Some _, Sil.Rmemory Sil.Mobjc
-                 | Some _, Sil.Rmemory Sil.Mnew when !Config.curr_language = Config.C_CPP ->
+                 | Some _, Sil.Rmemory Sil.Mnew
+                 | Some _, Sil.Rmemory Sil.Mnew_array when !Config.curr_language = Config.C_CPP ->
                      ml_bucket_opt = None, exn_leak
                  | Some _, Sil.Rmemory _ -> !Config.curr_language = Config.Java, exn_leak
                  | Some _, Sil.Rignore -> true, exn_leak
@@ -1217,8 +1219,8 @@ let get_local_stack cur_sigma init_sigma =
   let get_stack_var = function
     | Sil.Hpointsto (Sil.Lvar pvar, _, _) -> pvar
     | Sil.Hpointsto _ | Sil.Hlseg _ | Sil.Hdllseg _ -> assert false in
-  let filter_local_stack old_pvars = function
-    | Sil.Hpointsto (Sil.Lvar pvar, _, _) -> not (IList.exists (Sil.pvar_equal pvar) old_pvars)
+  let filter_local_stack olds = function
+    | Sil.Hpointsto (Sil.Lvar pvar, _, _) -> not (IList.exists (Pvar.equal pvar) olds)
     | Sil.Hpointsto _ | Sil.Hlseg _ | Sil.Hdllseg _ -> false in
   let init_stack = IList.filter filter_stack init_sigma in
   let init_stack_pvars = IList.map get_stack_var init_stack in
@@ -1227,7 +1229,7 @@ let get_local_stack cur_sigma init_sigma =
   (cur_local_stack, cur_local_stack_pvars)
 
 (** Extract the footprint, add a local stack and return it as a prop *)
-let extract_footprint_for_abs (p : 'a Prop.t) : Prop.exposed Prop.t * Sil.pvar list =
+let extract_footprint_for_abs (p : 'a Prop.t) : Prop.exposed Prop.t * Pvar.t list =
   let sigma = Prop.get_sigma p in
   let foot_pi = Prop.get_pi_footprint p in
   let foot_sigma = Prop.get_sigma_footprint p in
@@ -1238,7 +1240,7 @@ let extract_footprint_for_abs (p : 'a Prop.t) : Prop.exposed Prop.t * Sil.pvar l
 
 let remove_local_stack sigma pvars =
   let filter_non_stack = function
-    | Sil.Hpointsto (Sil.Lvar pvar, _, _) -> not (IList.exists (Sil.pvar_equal pvar) pvars)
+    | Sil.Hpointsto (Sil.Lvar pvar, _, _) -> not (IList.exists (Pvar.equal pvar) pvars)
     | Sil.Hpointsto _ | Sil.Hlseg _ | Sil.Hdllseg _ -> true in
   IList.filter filter_non_stack sigma
 
@@ -1252,7 +1254,7 @@ let set_footprint_for_abs (p : 'a Prop.t) (p_foot : 'a Prop.t) local_stack_pvars
   Prop.replace_sigma_footprint sigma (Prop.replace_pi_footprint pi p)
 
 (** Abstract the footprint of prop *)
-let abstract_footprint pname (tenv : Sil.tenv) (prop : Prop.normal Prop.t) : Prop.normal Prop.t =
+let abstract_footprint pname (tenv : Tenv.t) (prop : Prop.normal Prop.t) : Prop.normal Prop.t =
   let (p, added_local_vars) = extract_footprint_for_abs prop in
   let p_abs =
     abstract_prop

@@ -21,9 +21,9 @@ sig
 
   val print_failure_info : string -> unit
 
-  val print_tenv : Sil.tenv -> unit
+  val print_tenv : Tenv.t -> unit
 
-  val print_tenv_struct_unions : Sil.tenv -> unit
+  val print_tenv_struct_unions : Tenv.t -> unit
 
   val print_procedures : Cfg.cfg -> unit
 
@@ -48,11 +48,14 @@ sig
 
   val property_name : Clang_ast_t.obj_c_property_impl_decl_info -> Clang_ast_t.named_decl_info
 
-  val property_attribute_compare : Clang_ast_t.property_attribute -> Clang_ast_t.property_attribute -> int
+  val property_attribute_compare :
+    Clang_ast_t.property_attribute -> Clang_ast_t.property_attribute -> int
 
-  val generated_ivar_name : Clang_ast_t.named_decl_info -> Clang_ast_t.named_decl_info
+  val generated_ivar_name :
+    Clang_ast_t.named_decl_info -> Clang_ast_t.named_decl_info
 
-  val property_attribute_eq : Clang_ast_t.property_attribute -> Clang_ast_t.property_attribute -> bool
+  val property_attribute_eq :
+    Clang_ast_t.property_attribute -> Clang_ast_t.property_attribute -> bool
 
   val get_memory_management_attributes : unit -> Clang_ast_t.property_attribute list
 
@@ -74,6 +77,10 @@ sig
   val get_decl : Clang_ast_t.pointer -> Clang_ast_t.decl option
 
   val get_decl_opt : Clang_ast_t.pointer option -> Clang_ast_t.decl option
+
+  val get_stmt : Clang_ast_t.pointer -> Clang_ast_t.stmt option
+
+  val get_stmt_opt : Clang_ast_t.pointer option -> Clang_ast_t.stmt option
 
   val get_decl_opt_with_decl_ref : Clang_ast_t.decl_ref option -> Clang_ast_t.decl option
 
@@ -111,12 +118,12 @@ sig
 
   val make_qual_name_decl : string list -> string -> Clang_ast_t.named_decl_info
 
-  type type_ptr_to_sil_type =  Sil.tenv -> Clang_ast_t.type_ptr -> Sil.typ
+  type type_ptr_to_sil_type =  Tenv.t -> Clang_ast_t.type_ptr -> Sil.typ
 
-  val add_type_from_decl_ref : type_ptr_to_sil_type -> Sil.tenv -> Clang_ast_t.decl_ref option ->
+  val add_type_from_decl_ref : type_ptr_to_sil_type -> Tenv.t -> Clang_ast_t.decl_ref option ->
     bool -> unit
 
-  val add_type_from_decl_ref_list : type_ptr_to_sil_type -> Sil.tenv -> Clang_ast_t.decl_ref list ->
+  val add_type_from_decl_ref_list : type_ptr_to_sil_type -> Tenv.t -> Clang_ast_t.decl_ref list ->
     unit
 
 end
@@ -129,23 +136,29 @@ sig
   val string_from_list : string list -> string
 
   val append_no_duplicates_fields : (Ident.fieldname * Sil.typ * Sil.item_annotation) list ->
-    (Ident.fieldname * Sil.typ * Sil.item_annotation) list -> (Ident.fieldname * Sil.typ * Sil.item_annotation) list
+    (Ident.fieldname * Sil.typ * Sil.item_annotation) list ->
+    (Ident.fieldname * Sil.typ * Sil.item_annotation) list
 
   val append_no_duplicates_csu :
     Typename.t list -> Typename.t list -> Typename.t list
 
   val append_no_duplicates_methods : Procname.t list -> Procname.t list -> Procname.t list
 
-  val append_no_duplicated_vars : (Mangled.t * Sil.typ) list -> (Mangled.t * Sil.typ) list -> (Mangled.t * Sil.typ) list
+  val append_no_duplicated_vars :
+    (Mangled.t * Sil.typ) list -> (Mangled.t * Sil.typ) list -> (Mangled.t * Sil.typ) list
 
-  val append_no_duplicated_pvars : (Sil.exp * Sil.typ) list -> (Sil.exp * Sil.typ) list -> (Sil.exp * Sil.typ) list
+  val append_no_duplicateds :
+    (Sil.exp * Sil.typ) list -> (Sil.exp * Sil.typ) list -> (Sil.exp * Sil.typ) list
 
-  val sort_fields : (Ident.fieldname * Sil.typ * Sil.item_annotation) list -> (Ident.fieldname * Sil.typ * Sil.item_annotation) list
+  val sort_fields :
+    (Ident.fieldname * Sil.typ * Sil.item_annotation) list ->
+    (Ident.fieldname * Sil.typ * Sil.item_annotation) list
 
-  val sort_fields_tenv : Sil.tenv -> unit
+  val sort_fields_tenv : Tenv.t -> unit
 
   val collect_list_tuples : ('a list * 'b list * 'c list * 'd list * 'e list) list ->
-    'a list * 'b list * 'c list * 'd list * 'e list -> 'a list * 'b list * 'c list * 'd list * 'e list
+    'a list * 'b list * 'c list * 'd list * 'e list ->
+    'a list * 'b list * 'c list * 'd list * 'e list
 
   val swap_elements_list : 'a list -> 'a list
 
@@ -153,11 +166,12 @@ sig
 
   val mk_fresh_block_procname : Procname.t -> Procname.t
 
-  val get_next_block_pvar : Procname.t -> Sil.pvar
+  val get_next_block_pvar : Procname.t -> Pvar.t
 
   val reset_block_counter : unit -> unit
 
-  val mk_function_decl_info_from_block : Clang_ast_t.block_decl_info -> Clang_ast_t.function_decl_info
+  val mk_function_decl_info_from_block :
+    Clang_ast_t.block_decl_info -> Clang_ast_t.function_decl_info
 
   val zip: 'a list -> 'b list -> ('a * 'b) list
 
@@ -177,7 +191,7 @@ sig
   val get_var_name_string : Clang_ast_t.named_decl_info -> Clang_ast_t.var_decl_info -> string
 
   val mk_sil_var : Clang_ast_t.named_decl_info -> var_info option -> Procname.t -> Procname.t ->
-    Sil.pvar
+    Pvar.t
 
   val is_cpp_translation : CFrontend_config.lang -> bool
 end

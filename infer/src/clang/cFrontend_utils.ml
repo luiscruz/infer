@@ -39,7 +39,7 @@ struct
     pp Format.std_formatter fmt
 
   let print_tenv tenv =
-    Sil.tenv_iter (fun typname struct_t ->
+    Tenv.iter (fun typname struct_t ->
         match typname with
         | Typename.TN_csu (Csu.Class _, _) | Typename.TN_csu (Csu.Protocol, _) ->
             print_endline (
@@ -55,7 +55,7 @@ struct
       ) tenv
 
   let print_tenv_struct_unions tenv =
-    Sil.tenv_iter (fun typname struct_t ->
+    Tenv.iter (fun typname struct_t ->
         match typname with
         | Typename.TN_csu (Csu.Struct, _) | Typename.TN_csu (Csu.Union, _) ->
             print_endline (
@@ -98,7 +98,7 @@ end
 
 module Ast_utils =
 struct
-  type type_ptr_to_sil_type = Sil.tenv -> Clang_ast_t.type_ptr -> Sil.typ
+  type type_ptr_to_sil_type = Tenv.t -> Clang_ast_t.type_ptr -> Sil.typ
 
   let string_of_decl decl =
     let name = Clang_ast_proj.get_decl_kind_string decl in
@@ -274,6 +274,16 @@ struct
     | Some decl_ptr -> get_decl decl_ptr
     | None -> None
 
+  let get_stmt stmt_ptr =
+    try
+      Some (Clang_ast_main.PointerMap.find stmt_ptr !CFrontend_config.pointer_stmt_index)
+    with Not_found -> Printing.log_stats "stmt with pointer %d not found\n" stmt_ptr; None
+
+  let get_stmt_opt stmt_ptr_opt =
+    match stmt_ptr_opt with
+    | Some stmt_ptr -> get_stmt stmt_ptr
+    | None -> None
+
   let get_decl_opt_with_decl_ref decl_ref_opt =
     match decl_ref_opt with
     | Some decl_ref -> get_decl decl_ref.Clang_ast_t.dr_decl_pointer
@@ -423,7 +433,7 @@ struct
     let eq (m1, t1) (m2, t2) = (Mangled.equal m1 m2) && (Sil.typ_equal t1 t2) in
     append_no_duplicates eq list1 list2
 
-  let append_no_duplicated_pvars list1 list2 =
+  let append_no_duplicateds list1 list2 =
     let eq (e1, t1) (e2, t2) = (Sil.exp_equal e1 e2) && (Sil.typ_equal t1 t2) in
     append_no_duplicates eq list1 list2
 
@@ -462,8 +472,8 @@ struct
   let sort_fields_tenv tenv =
     let sort_fields_struct typname st =
       let st' = { st with Sil.instance_fields = (sort_fields st.Sil.instance_fields) } in
-      Sil.tenv_add tenv typname st' in
-    Sil.tenv_iter sort_fields_struct tenv
+      Tenv.add tenv typname st' in
+    Tenv.iter sort_fields_struct tenv
 
   let rec collect_list_tuples l (a, a1, b, c, d) =
     match l with
@@ -488,7 +498,7 @@ struct
   (* It does not update the global block_counter *)
   let get_next_block_pvar defining_proc =
     let name = block_procname_with_index defining_proc (!block_counter +1) in
-    Sil.mk_pvar (Mangled.from_string (CFrontend_config.temp_var^"_"^name)) defining_proc
+    Pvar.mk (Mangled.from_string (CFrontend_config.temp_var^"_"^name)) defining_proc
 
   (* Reset  block counter *)
   let reset_block_counter () =
@@ -589,8 +599,8 @@ struct
             if var_decl_info.Clang_ast_t.vdi_is_static_local then
               Mangled.from_string ((Procname.to_string outer_procname) ^ "_" ^ name_string)
             else simple_name in
-          Sil.mk_pvar_global global_mangled_name
-        else if not should_be_mangled then Sil.mk_pvar simple_name procname
+          Pvar.mk_global global_mangled_name
+        else if not should_be_mangled then Pvar.mk simple_name procname
         else
           let type_name = Ast_utils.string_of_type_ptr type_ptr in
           let start_location = fst decl_info.Clang_ast_t.di_source_range in
@@ -598,8 +608,8 @@ struct
           let line_str = match line_opt with | Some line -> string_of_int line | None -> "" in
           let mangled = string_crc_hex32 (type_name ^ line_str) in
           let mangled_name = Mangled.mangled name_string mangled in
-          Sil.mk_pvar mangled_name procname
-    | None -> Sil.mk_pvar (Mangled.from_string name_string) procname
+          Pvar.mk mangled_name procname
+    | None -> Pvar.mk (Mangled.from_string name_string) procname
 
   let is_cpp_translation language =
     language = CFrontend_config.CPP || language = CFrontend_config.OBJCPP

@@ -1,6 +1,6 @@
 opam-version: "1.2"
 name: "infer"
-version: "0.7.0"
+version: "0.8.0"
 maintainer: "opam-devel@lists.ocaml.org"
 authors: "Facebook"
 homepage: "https://github.com/facebook/infer"
@@ -8,13 +8,25 @@ bug-reports: "https://github.com/facebook/infer/issues"
 dev-repo: "https://github.com/facebook/infer.git"
 license: "BSD"
 build: [
-  ["echo" "building from opam is not supported yet"]
-  ["exit" "1"]
+  ["./autogen.sh"]
+  ["./configure"
+     "--disable-c-analyzers"
+     "--prefix=%{prefix}%"]
+  ["make" "-j%{jobs}%"]
 ]
-install: []
-remove: []
+install: [
+  ["make" "install"]
+]
+remove: [
+  ["./autogen.sh"]
+  ["./configure"
+     "--disable-c-analyzers"
+     "--prefix=%{prefix}%"]
+  ["make" "uninstall"]
+]
 ocaml-version: [ >= "4.02.1" ]
 depends: [
+  "conf-autoconf"
   "ocamlfind" {build}
   "sawja" {>="1.5.1"}
   "atdgen" {>="1.6.0"}
@@ -25,4 +37,6 @@ depends: [
 depexts: [
   [ ["ubuntu"] ["python2.7-dev"] ]
   [ ["debian"] ["python2.7-dev"] ]
+  [ ["ubuntu"] ["default-jdk"] ]
+  [ ["debian"] ["default-jdk"] ]
 ]

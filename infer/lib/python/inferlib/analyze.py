@@ -68,6 +68,9 @@ base_group.add_argument('-ic', '--changed-only',
 base_group.add_argument('-r', '--reactive', action='store_true',
                         help='''Analyze in reactive propagation mode
                         starting from changed files.''')
+base_group.add_argument('-m', '--merge', action='store_true',
+                        help='''merge the captured results directories specified
+                        in the dependency file.''')
 base_group.add_argument('-c', '--continue', action='store_true',
                         dest='continue_capture',
                         help='''Continue the capture for the reactive
@@ -172,10 +175,11 @@ def create_results_dir(results_dir):
     utils.mkdir_if_not_exists(os.path.join(results_dir, 'sources'))
 
 
-def reset_start_file(results_dir):
-    # create new empty file - this will update modified timestamp
-    open(os.path.join(results_dir, '.start'), 'w').close()
-
+def reset_start_file(results_dir, touch_if_present=False):
+    start_path = os.path.join(results_dir, '.start')
+    if (not os.path.exists(start_path)) or touch_if_present:
+        # create new empty file - this will update modified timestamp
+        open(start_path, 'w').close()
 
 def clean(infer_out):
     directories = [
@@ -319,6 +323,9 @@ class AnalyzerWrapper(object):
 
         if self.args.continue_capture:
             infer_options.append('-continue')
+
+        if self.args.merge:
+            infer_options.append('-merge')
 
         if self.args.specs_dirs:
             infer_options += self.args.specs_dirs

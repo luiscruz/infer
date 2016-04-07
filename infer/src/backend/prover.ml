@@ -819,18 +819,18 @@ let check_inconsistency_base prop =
     let procedure_attr =
       Cfg.Procdesc.get_attributes procdesc in
     let is_java_this pvar =
-      !Config.curr_language = Config.Java && Sil.pvar_is_this pvar in
+      !Config.curr_language = Config.Java && Pvar.is_this pvar in
     let is_objc_instance_self pvar =
       !Config.curr_language = Config.C_CPP &&
-      Sil.pvar_get_name pvar = Mangled.from_string "self" &&
+      Pvar.get_name pvar = Mangled.from_string "self" &&
       procedure_attr.ProcAttributes.is_objc_instance_method in
     let is_cpp_this pvar =
-      !Config.curr_language = Config.C_CPP && Sil.pvar_is_this pvar &&
+      !Config.curr_language = Config.C_CPP && Pvar.is_this pvar &&
       procedure_attr.ProcAttributes.is_cpp_instance_method in
     let do_hpred = function
       | Sil.Hpointsto (Sil.Lvar pv, Sil.Eexp (e, _), _) ->
           Sil.exp_equal e Sil.exp_zero &&
-          Sil.pvar_is_seed pv &&
+          Pvar.is_seed pv &&
           (is_java_this pv || is_cpp_this pv || is_objc_instance_self pv)
       | _ -> false in
     IList.exists do_hpred sigma in
@@ -1139,13 +1139,13 @@ let exp_imply calc_missing subs e1_in e2_in : subst2 =
           let () = ProverState.add_missing_pi (Sil.Aeq (e1_in, e2_in)) in
           subs
         else raise (IMPL_EXC ("expressions not equal", subs, (EXC_FALSE_EXPS (e1, e2))))
-    | Sil.Lvar pv1, Sil.Const _ when Sil.pvar_is_global pv1 ->
+    | Sil.Lvar pv1, Sil.Const _ when Pvar.is_global pv1 ->
         if calc_missing then
           let () = ProverState.add_missing_pi (Sil.Aeq (e1_in, e2_in)) in
           subs
         else raise (IMPL_EXC ("expressions not equal", subs, (EXC_FALSE_EXPS (e1, e2))))
     | Sil.Lvar v1, Sil.Lvar v2 ->
-        if Sil.pvar_equal v1 v2 then subs
+        if Pvar.equal v1 v2 then subs
         else raise (IMPL_EXC ("expressions not equal", subs, (EXC_FALSE_EXPS (e1, e2))))
     | Sil.Const c1, Sil.Const c2 ->
         if (Sil.const_equal c1 c2) then subs
@@ -1453,7 +1453,7 @@ struct
   let cloneable_type = Typename.Java.from_string "java.lang.Cloneable"
 
   let is_interface tenv class_name =
-    match Sil.tenv_lookup tenv class_name with
+    match Tenv.lookup tenv class_name with
     | Some ({ Sil.csu = Csu.Class Csu.Java; struct_name = Some _ } as struct_typ) ->
         (IList.length struct_typ.Sil.instance_fields = 0) &&
         (IList.length struct_typ.Sil.def_methods = 0)
@@ -1471,7 +1471,7 @@ struct
   let check_subclass_tenv tenv c1 c2 =
     let rec check cn =
       Typename.equal cn c2 || is_root_class c2 ||
-      match Sil.tenv_lookup tenv cn with
+      match Tenv.lookup tenv cn with
       | Some ({ Sil.struct_name = Some _; csu = Csu.Class _; superclasses }) ->
           IList.exists check superclasses
       | _ -> false in
@@ -1618,7 +1618,7 @@ let get_overrides_of tenv supertype pname =
       if typ_has_method resolved_pname typ then (typ, resolved_pname) :: overrides_acc
       else overrides_acc
     else overrides_acc in
-  Sil.tenv_fold gather_overrides tenv []
+  Tenv.fold gather_overrides tenv []
 
 (** Check the equality of two types ignoring flags in the subtyping components *)
 let texp_equal_modulo_subtype_flag texp1 texp2 = match texp1, texp2 with
@@ -1682,7 +1682,7 @@ let sexp_imply_preprocess se1 texp1 se2 = match se1, texp1, se2 with
     of the one in the callee, add a type frame and type missing *)
 let handle_parameter_subtype tenv prop1 sigma2 subs (e1, se1, texp1) (se2, texp2) =
   let is_callee = match e1 with
-    | Sil.Lvar pv -> Sil.pvar_is_callee pv
+    | Sil.Lvar pv -> Pvar.is_callee pv
     | _ -> false in
   let is_allocated_lhs e =
     let filter = function
@@ -1702,7 +1702,7 @@ let handle_parameter_subtype tenv prop1 sigma2 subs (e1, se1, texp1) (se2, texp2
       Sil.Eexp(e1', _), Sil.Eexp(e2', _)
       when not (is_allocated_lhs e1') ->
         begin
-          let t1, t2 = Sil.expand_type tenv _t1, Sil.expand_type tenv _t2 in
+          let t1, t2 = Tenv.expand_type tenv _t1, Tenv.expand_type tenv _t2 in
           match type_rhs e2' with
           | Some (t2_ptsto , sub2) ->
               if not (Sil.typ_equal t1 t2) && Subtyping_check.check_subtype tenv t1 t2
@@ -1942,7 +1942,7 @@ and sigma_imply tenv calc_index_frame calc_missing subs prop1 sigma2 : (subst2 *
       | Config.Java ->
           let object_type =
             Typename.TN_csu (Csu.Class Csu.Java, Mangled.from_string "java.lang.String") in
-          let typ = match Sil.tenv_lookup tenv object_type with
+          let typ = match Tenv.lookup tenv object_type with
             | Some typ -> typ
             | None -> assert false in
           Sil.Sizeof (Sil.Tstruct typ, Sil.Subtype.exact) in
@@ -1954,7 +1954,7 @@ and sigma_imply tenv calc_index_frame calc_missing subs prop1 sigma2 : (subst2 *
     let class_texp =
       let class_type =
         Typename.TN_csu (Csu.Class Csu.Java, Mangled.from_string "java.lang.Class") in
-      let typ = match Sil.tenv_lookup tenv class_type with
+      let typ = match Tenv.lookup tenv class_type with
         | Some typ -> typ
         | None -> assert false in
       Sil.Sizeof (Sil.Tstruct typ, Sil.Subtype.exact) in

@@ -41,7 +41,7 @@ module ComplexExpressions = struct
 
 
   let procname_optional_isPresent = Models.is_optional_isPresent
-  let procname_instanceof = Procname.equal SymExec.ModelBuiltins.__instanceof
+  let procname_instanceof = Procname.equal ModelBuiltins.__instanceof
 
   let procname_is_false_on_null pn =
     match Specs.proc_resolve_attributes pn with
@@ -73,7 +73,7 @@ module ComplexExpressions = struct
     procname_optional_isPresent pn ||
     procname_instanceof pn ||
     procname_containsKey pn ||
-    SymExec.function_is_builtin pn
+    Builtin.is_registered pn
 
 
   exception Not_handled
@@ -116,7 +116,7 @@ module ComplexExpressions = struct
           case_not_handled ()
       | Sil.Dpvar pv
       | Sil.Dpvaraddr pv when not (Errdesc.pvar_is_frontend_tmp pv) ->
-          Sil.pvar_to_string pv
+          Pvar.to_string pv
       | Sil.Dpvar _
       | Sil.Dpvaraddr _ (* front-end variable -- this should not happen) *) ->
           case_not_handled ()
@@ -236,7 +236,8 @@ let rec typecheck_expr
   | _ -> tr_default
 
 (** Typecheck an instruction. *)
-let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc curr_pname
+let typecheck_instr
+    tenv ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc curr_pname
     curr_pdesc find_canonical_duplicate annotated_signature instr_ref linereader typestate instr =
   (* let print_current_state () = *)
   (*   L.stdout "Current Typestate in node %a@\n%a@." *)
@@ -257,11 +258,11 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
           Some (TypeAnnotation.get_origin ta)
       | None -> None in
     let handle_temporary e = match Idenv.expand_expr idenv e with
-      | Sil.Lvar pvar when name_is_temporary (Sil.pvar_to_string pvar) ->
+      | Sil.Lvar pvar when name_is_temporary (Pvar.to_string pvar) ->
           begin
             match pvar_get_origin pvar with
             | Some (TypeOrigin.Formal s) ->
-                let pvar' = Sil.mk_pvar s curr_pname in
+                let pvar' = Pvar.mk s curr_pname in
                 Some (Sil.Lvar pvar')
             | _ -> None
           end
@@ -294,7 +295,7 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
                    TypeAnnotation.from_item_annotation ia (TypeOrigin.Field (fn, loc)),
                    [loc]
                  ) in
-               TypeState.add_pvar pvar range typestate
+               TypeState.add pvar range typestate
            | None -> typestate) in
 
     (* Convert a function call to a pvar. *)
@@ -306,7 +307,7 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
             match ComplexExpressions.exp_to_string node' exp with
             | None -> default
             | Some exp_str ->
-                let pvar = Sil.mk_pvar (Mangled.from_string exp_str) curr_pname in
+                let pvar = Pvar.mk (Mangled.from_string exp_str) curr_pname in
                 let already_defined_in_typestate =
                   match TypeState.lookup_pvar pvar typestate with
                   | Some (_, ta, _) ->
@@ -344,27 +345,27 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
         let exp' = Idenv.expand_expr_temps idenv node _exp in
 
         let is_parameter_field pvar = (* parameter.field *)
-          let name = Sil.pvar_get_name pvar in
+          let name = Pvar.get_name pvar in
           let filter (s, _, _) = Mangled.equal s name in
           IList.exists filter annotated_signature.Annotations.params in
 
         let is_static_field pvar = (* static field *)
-          Sil.pvar_is_global pvar in
+          Pvar.is_global pvar in
 
         let pvar_to_str pvar =
           if Sil.exp_is_this (Sil.Lvar pvar) then ""
-          else Sil.pvar_to_string pvar ^ "_" in
+          else Pvar.to_string pvar ^ "_" in
 
         let res = match exp' with
           | Sil.Lvar pv when is_parameter_field pv || is_static_field pv ->
               let fld_name = pvar_to_str pv ^ Ident.fieldname_to_string fn in
-              let pvar = Sil.mk_pvar (Mangled.from_string fld_name) curr_pname in
+              let pvar = Pvar.mk (Mangled.from_string fld_name) curr_pname in
               let typestate' = update_typestate_fld pvar fn typ in
               (Sil.Lvar pvar, typestate')
           | Sil.Lfield (_exp', fn', _) when Ident.java_fieldname_is_outer_instance fn' ->
               (** handle double dereference when accessing a field from an outer class *)
               let fld_name = Ident.fieldname_to_string fn' ^ "_" ^ Ident.fieldname_to_string fn in
-              let pvar = Sil.mk_pvar (Mangled.from_string fld_name) curr_pname in
+              let pvar = Pvar.mk (Mangled.from_string fld_name) curr_pname in
               let typestate' = update_typestate_fld pvar fn typ in
               (Sil.Lvar pvar, typestate')
           | Sil.Lvar _ | Sil.Lfield _ when ComplexExpressions.all_nested_fields () ->
@@ -372,7 +373,7 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
               begin
                 match ComplexExpressions.exp_to_string node' exp with
                 | Some exp_str ->
-                    let pvar = Sil.mk_pvar (Mangled.from_string exp_str) curr_pname in
+                    let pvar = Pvar.mk (Mangled.from_string exp_str) curr_pname in
                     let typestate' = update_typestate_fld pvar fn typ in
                     (Sil.Lvar pvar, typestate')
                 | None ->
@@ -429,10 +430,10 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
     else
       annotated_signature.Annotations.params in
 
-  let pvar_is_return pvar =
+  let is_return pvar =
     let pdesc = Cfg.Node.get_proc_desc node in
     let ret_pvar = Cfg.Procdesc.get_ret_var pdesc in
-    Sil.pvar_equal pvar ret_pvar in
+    Pvar.equal pvar ret_pvar in
 
   (* Apply a function to a pvar and its associated content if front-end generated. *)
   let pvar_apply loc handle_pvar typestate pvar =
@@ -480,7 +481,7 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
       TypeState.add_id id
         (typecheck_expr_simple typestate' e' typ TypeOrigin.Undef loc)
         typestate'
-  | Sil.Set (Sil.Lvar pvar, _, Sil.Const (Sil.Cexn _), _) when pvar_is_return pvar ->
+  | Sil.Set (Sil.Lvar pvar, _, Sil.Const (Sil.Cexn _), _) when is_return pvar ->
       (* skip assignment to return variable where it is an artifact of a throw instruction *)
       typestate
   | Sil.Set (e1, typ, e2, loc) ->
@@ -498,7 +499,7 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
       let typestate2 =
         match e1' with
         | Sil.Lvar pvar ->
-            TypeState.add_pvar
+            TypeState.add
               pvar
               (typecheck_expr_simple typestate1 e2 typ TypeOrigin.Undef loc)
               typestate1
@@ -509,14 +510,14 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
       check_field_assign ();
       typestate2
   | Sil.Call ([id], Sil.Const (Sil.Cfun pn), [(_, typ)], loc, _)
-    when Procname.equal pn SymExec.ModelBuiltins.__new ||
-         Procname.equal pn SymExec.ModelBuiltins.__new_array ->
+    when Procname.equal pn ModelBuiltins.__new ||
+         Procname.equal pn ModelBuiltins.__new_array ->
       TypeState.add_id
         id
         (typ, TypeAnnotation.const Annotations.Nullable false TypeOrigin.New, [loc])
         typestate (* new never returns null *)
   | Sil.Call ([id], Sil.Const (Sil.Cfun pn), (e, typ):: _, loc, _)
-    when Procname.equal pn SymExec.ModelBuiltins.__cast ->
+    when Procname.equal pn ModelBuiltins.__cast ->
       typecheck_expr_for_errors typestate e loc;
       let e', typestate' =
         convert_complex_exp_to_pvar node false e typestate loc in
@@ -525,7 +526,7 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
         (typecheck_expr_simple typestate' e' typ TypeOrigin.ONone loc)
         typestate'
   | Sil.Call ([id], Sil.Const (Sil.Cfun pn), [(array_exp, t)], loc, _)
-    when Procname.equal pn SymExec.ModelBuiltins.__get_array_size ->
+    when Procname.equal pn ModelBuiltins.__get_array_size ->
       let (_, ta, _) = typecheck_expr
           find_canonical_duplicate
           calls_this
@@ -556,17 +557,44 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
           [loc]
         )
         typestate
-  | Sil.Call (_, Sil.Const (Sil.Cfun pn), _, _, _) when SymExec.function_is_builtin pn ->
+  | Sil.Call (_, Sil.Const (Sil.Cfun pn), _, _, _) when Builtin.is_registered pn ->
       typestate (* skip othe builtins *)
-  | Sil.Call (ret_ids, Sil.Const (Sil.Cfun callee_pname), _etl, loc, cflags)
-    when Specs.proc_resolve_attributes (* AttributesTable.load_attributes *) callee_pname <> None ->
+  | Sil.Call
+      (ret_ids,
+       Sil.Const (Sil.Cfun ((Procname.Java callee_pname_java) as callee_pname)),
+       etl_,
+       loc,
+       cflags)
+    ->
       Ondemand.analyze_proc_name ~propagate_exceptions:true curr_pdesc callee_pname;
       let callee_attributes =
         match Specs.proc_resolve_attributes (* AttributesTable.load_attributes *) callee_pname with
-        | Some proc_attributes -> proc_attributes
-        | None -> assert false in
+        | Some proc_attributes ->
+            proc_attributes
+        | None ->
+            let formals =
+              IList.mapi
+                (fun i (_, typ) ->
+                   let arg =
+                     if i = 0 &&
+                        not (Procname.java_is_static callee_pname)
+                     then "this"
+                     else Printf.sprintf "arg%d" i in
+                   (Mangled.from_string arg, typ))
+                etl_ in
+            let ret_typ_str = Procname.java_get_return_type callee_pname_java in
+            let ret_type =
+              match Tenv.lookup_java_typ_from_string tenv ret_typ_str with
+              | Sil.Tstruct _ as typ -> Sil.Tptr (typ, Sil.Pk_pointer)
+              | typ -> typ in
+            let proc_attributes =
+              { (ProcAttributes.default callee_pname Config.Java) with
+                ProcAttributes.formals;
+                ret_type;
+              } in
+            proc_attributes in
 
-      let etl = drop_unchecked_params calls_this callee_attributes _etl in
+      let etl = drop_unchecked_params calls_this callee_attributes etl_ in
       let call_params, typestate1 =
         let handle_et (e1, t1) (etl1, typestate1) =
           typecheck_expr_for_errors typestate e1 loc;
@@ -627,7 +655,7 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
                     (Some instr_ref)
                     loc curr_pname
                 end;
-              TypeState.add_pvar
+              TypeState.add
                 pvar
                 (t, TypeAnnotation.const Annotations.Nullable false TypeOrigin.ONone, [loc])
                 typestate''
@@ -658,7 +686,7 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
         let handle_pvar ann b typestate1 pvar = (* handle the annotation flag for pvar *)
           match TypeState.lookup_pvar pvar typestate1 with
           | Some (t, _, _) ->
-              TypeState.add_pvar
+              TypeState.add
                 pvar
                 (t, TypeAnnotation.const ann b TypeOrigin.ONone, [loc])
                 typestate1
@@ -748,8 +776,8 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
               match ComplexExpressions.exp_to_string_map_dexp
                       convert_dexp_key_to_dexp_get node exp_key with
               | Some map_get_str ->
-                  let pvar_map_get = Sil.mk_pvar (Mangled.from_string map_get_str) curr_pname in
-                  TypeState.add_pvar
+                  let pvar_map_get = Pvar.mk (Mangled.from_string map_get_str) curr_pname in
+                  TypeState.add
                     pvar_map_get
                     (typecheck_expr_simple typestate' exp_value typ_value TypeOrigin.Undef loc)
                     typestate'
@@ -798,7 +826,7 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
                 let extension = TypeState.get_extension typestate1 in
                 let extension' =
                   ext.TypeState.check_instr
-                    get_proc_desc curr_pname curr_pdesc extension instr etl' in
+                    tenv get_proc_desc curr_pname curr_pdesc extension instr etl' in
                 TypeState.set_extension typestate1 extension'
               else typestate1 in
             let has_method pn name = match pn with
@@ -886,12 +914,12 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
             match ComplexExpressions.exp_to_string_map_dexp map_dexp node' e with
             | Some e_str ->
                 let pvar =
-                  Sil.mk_pvar (Mangled.from_string e_str) curr_pname in
+                  Pvar.mk (Mangled.from_string e_str) curr_pname in
                 let e1 = Sil.Lvar pvar in
                 let (typ, ta, _) =
                   typecheck_expr_simple typestate e1 Sil.Tvoid TypeOrigin.ONone loc in
                 let range = (typ, ta, [loc]) in
-                let typestate1 = TypeState.add_pvar pvar range typestate in
+                let typestate1 = TypeState.add pvar range typestate in
                 typestate1, e1, EradicateChecks.From_containsKey
             | None ->
                 typestate, e, EradicateChecks.From_condition
@@ -903,7 +931,7 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
             | Some (t, ta1, locs) ->
                 if TypeAnnotation.get_value ann ta1 <> b then
                   let ta2 = TypeAnnotation.set_value ann b ta1 in
-                  TypeState.add_pvar pvar (t, ta2, locs) typestate'
+                  TypeState.add pvar (t, ta2, locs) typestate'
                 else typestate'
             | None -> typestate' in
           match e' with
@@ -1043,7 +1071,7 @@ let typecheck_instr ext calls_this checks (node: Cfg.Node.t) idenv get_proc_desc
 
 (** Typecheck the instructions in a cfg node. *)
 let typecheck_node
-    ext calls_this checks idenv get_proc_desc curr_pname curr_pdesc
+    tenv ext calls_this checks idenv get_proc_desc curr_pname curr_pdesc
     find_canonical_duplicate annotated_signature typestate node linereader =
 
   let instrs = Cfg.Node.get_instrs node in
@@ -1062,7 +1090,7 @@ let typecheck_node
         if has_exceptions then
           typestates_exn := typestate :: !typestates_exn
     | Sil.Set (Sil.Lvar pv, _, _, _) when
-        Sil.pvar_is_return pv &&
+        Pvar.is_return pv &&
         Cfg.Node.get_kind node = Cfg.Node.throw_kind ->
         (* throw instruction *)
         typestates_exn := typestate :: !typestates_exn
@@ -1074,7 +1102,8 @@ let typecheck_node
     let instr_ref = (* keep unique instruction reference per-node *)
       TypeErr.InstrRef.gen instr_ref_gen in
     let instr' =
-      typecheck_instr ext calls_this checks node idenv get_proc_desc curr_pname curr_pdesc
+      typecheck_instr
+        tenv ext calls_this checks node idenv get_proc_desc curr_pname curr_pdesc
         find_canonical_duplicate annotated_signature instr_ref linereader typestate instr in
     handle_exceptions typestate instr;
     instr' in

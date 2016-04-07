@@ -10,13 +10,11 @@ RUN ["/opt/sdk-tools/android-accept-licenses.sh", \
      "android update sdk --filter \"build-tools-22.0.1\" --no-ui --force --all"]
 
 # Debian config
-RUN add-apt-repository ppa:cwchien/gradle # to get a recent gradle
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
             build-essential \
             curl \
             git \
-            gradle \
             groff \
             libgmp-dev \
             libmpc-dev \
@@ -32,17 +30,17 @@ RUN apt-get update && \
             zlib1g-dev
 
 # Install OPAM
-RUN curl -sL \
-      https://github.com/ocaml/opam/releases/download/1.2.2/opam-1.2.2-x86_64-Linux \
+RUN VERSION=1.2.2; \
+    curl -sL \
+      https://github.com/ocaml/opam/releases/download/$VERSION/opam-$VERSION-x86_64-Linux \
       -o /usr/local/bin/opam && \
-    chmod 755 /usr/local/bin/opam
+    chmod 755 /usr/local/bin/opam && \
+    ((/usr/local/bin/opam --version | grep -q $VERSION) || \
+     (echo "failed to download opam from GitHub."; exit 1))
 RUN opam init -y --comp=4.02.3
 
 # Download the latest Infer release
-RUN INFER_VERSION=$(curl -s https://api.github.com/repos/facebook/infer/releases \
-      | grep -e '^[ ]\+"tag_name"' \
-      | head -1 \
-      | cut -d '"' -f 4); \
+RUN INFER_VERSION=v0.8.0; \
     cd /opt && \
     curl -sL \
       https://github.com/facebook/infer/releases/download/${INFER_VERSION}/infer-linux64-${INFER_VERSION}.tar.xz | \

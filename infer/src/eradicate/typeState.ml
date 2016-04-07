@@ -23,7 +23,8 @@ type 'a ext =
   {
     empty : 'a; (** empty extension *)
     check_instr : (** check the extension for an instruction *)
-      get_proc_desc -> Procname.t -> Cfg.Procdesc.t -> 'a -> Sil.instr -> parameters -> 'a;
+      Tenv.t -> get_proc_desc -> Procname.t ->
+      Cfg.Procdesc.t -> 'a -> Sil.instr -> parameters -> 'a;
     join : 'a -> 'a -> 'a; (** join two extensions *)
     pp : Format.formatter -> 'a -> unit (** pretty print an extension *)
   }
@@ -138,7 +139,7 @@ let add_id id range typestate =
   if map' == typestate.map then typestate
   else { typestate with map = map' }
 
-let add_pvar pvar range typestate =
+let add pvar range typestate =
   let map' = M.add (Sil.Lvar pvar) range typestate.map in
   if map' == typestate.map then typestate
   else { typestate with map = map' }

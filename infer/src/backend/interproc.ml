@@ -478,14 +478,12 @@ let do_symbolic_execution handle_exn tenv
   let pdesc = Cfg.Node.get_proc_desc node in
   State.mark_execution_start node;
   (* build the const map lazily *)
-  State.set_const_map (ConstantPropagation.build_const_map pdesc);
+  State.set_const_map (ConstantPropagation.build_const_map tenv pdesc);
   check_assignement_guard node;
   let instrs = Cfg.Node.get_instrs node in
   (* fresh normal vars must be fresh w.r.t. instructions *)
   Ident.update_name_generator (instrs_get_normal_vars instrs);
-  let pset =
-    SymExec.lifted_sym_exec handle_exn tenv pdesc
-      (Paths.PathSet.from_renamed_list [(prop, path)]) node instrs in
+  let pset = SymExec.node handle_exn tenv node (Paths.PathSet.from_renamed_list [(prop, path)]) in
   L.d_strln ".... After Symbolic Execution ....";
   Propset.d prop (Paths.PathSet.to_propset pset);
   L.d_ln (); L.d_ln();
@@ -644,7 +642,7 @@ let report_context_leaks pname sigma tenv =
   IList.iter
     (function
       | Sil.Hpointsto (Sil.Lvar pv, Sil.Estruct (static_flds, _), _)
-        when Sil.pvar_is_global pv ->
+        when Pvar.is_global pv ->
           IList.iter
             (fun (f_name, f_strexp) ->
                check_reachable_context_from_fld (f_name, f_strexp) context_exps)
@@ -788,8 +786,8 @@ let collect_postconditions wl tenv pdesc : Paths.PathSet.t * Specs.Visitedset.t 
 
 let create_seed_vars sigma =
   let hpred_add_seed sigma = function
-    | Sil.Hpointsto (Sil.Lvar pv, se, typ) when not (Sil.pvar_is_abducted pv) ->
-        Sil.Hpointsto(Sil.Lvar (Sil.pvar_to_seed pv), se, typ) :: sigma
+    | Sil.Hpointsto (Sil.Lvar pv, se, typ) when not (Pvar.is_abducted pv) ->
+        Sil.Hpointsto(Sil.Lvar (Pvar.to_seed pv), se, typ) :: sigma
     | _ -> sigma in
   IList.fold_left hpred_add_seed [] sigma
 
@@ -824,7 +822,7 @@ let initial_prop
     tenv (curr_f: Cfg.Procdesc.t) (prop : 'a Prop.t) add_formals
   : Prop.normal Prop.t =
   let construct_decl (x, typ) =
-    (Sil.mk_pvar x (Cfg.Procdesc.get_proc_name curr_f), typ) in
+    (Pvar.mk x (Cfg.Procdesc.get_proc_name curr_f), typ) in
   let new_formals =
     if add_formals
     then IList.map construct_decl (Cfg.Procdesc.get_formals curr_f)
@@ -1098,7 +1096,7 @@ let custom_error_preconditions summary =
 let remove_this_not_null prop =
   let collect_hpred (var_option, hpreds) = function
     | Sil.Hpointsto (Sil.Lvar pvar, Sil.Eexp (Sil.Var var, _), _)
-      when !Config.curr_language = Config.Java && Sil.pvar_is_this pvar ->
+      when !Config.curr_language = Config.Java && Pvar.is_this pvar ->
         (Some var, hpreds)
     | hpred -> (var_option, hpred:: hpreds) in
   let collect_atom var atoms = function

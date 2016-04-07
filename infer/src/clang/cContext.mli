@@ -19,7 +19,7 @@ type curr_class =
 
 type t =
   {
-    tenv : Sil.tenv;
+    tenv : Tenv.t;
     cg : Cg.t;
     cfg : Cfg.cfg;
     procdesc : Cfg.Procdesc.t;
@@ -28,7 +28,7 @@ type t =
     return_param_typ : Sil.typ option;
     is_callee_expression : bool;
     outer_context : t option; (* in case of objc blocks, the context of the method containing the block *)
-    mutable blocks_static_vars : ((Sil.pvar * Sil.typ) list) Procname.Map.t;
+    mutable blocks_static_vars : ((Pvar.t * Sil.typ) list) Procname.Map.t;
   }
 
 val get_procdesc : t -> Cfg.Procdesc.t
@@ -51,16 +51,16 @@ val curr_class_hash : curr_class -> int
 
 val is_objc_method : t -> bool
 
-val get_tenv : t -> Sil.tenv
+val get_tenv : t -> Tenv.t
 
-val create_context : Sil.tenv -> Cg.t -> Cfg.cfg -> Cfg.Procdesc.t ->
+val create_context : Tenv.t -> Cg.t -> Cfg.cfg -> Cfg.Procdesc.t ->
   curr_class -> Sil.typ option -> bool -> t option -> t
 
-val create_curr_class : Sil.tenv -> string -> Csu.class_kind -> curr_class
+val create_curr_class : Tenv.t -> string -> Csu.class_kind -> curr_class
 
-val add_block_static_var : t -> Procname.t -> (Sil.pvar * Sil.typ) -> unit
+val add_block_static_var : t -> Procname.t -> (Pvar.t * Sil.typ) -> unit
 
-val static_vars_for_block : t -> Procname.t -> (Sil.pvar * Sil.typ) list
+val static_vars_for_block : t -> Procname.t -> (Pvar.t * Sil.typ) list
 
 val is_objc_instance : t -> bool
 

@@ -22,7 +22,8 @@ let verbose = Config.from_env_variable "ERADICATE_TYPINGS"
 (* print step-by-step tracing information *)
 let trace = Config.from_env_variable "ERADICATE_TRACE"
 
-let check_field_initialization = true (* check that nonnullable fields are initialized in constructors *)
+(* check that nonnullable fields are initialized in constructors *)
+let check_field_initialization = true
 
 type parameters = TypeState.parameters
 
@@ -69,16 +70,16 @@ struct
     | None -> ()
 
   let callback1
-      find_canonical_duplicate calls_this checks get_proc_desc idenv curr_pname
+      tenv find_canonical_duplicate calls_this checks get_proc_desc idenv curr_pname
       curr_pdesc annotated_signature linereader proc_loc
     : bool * Extension.extension TypeState.t option =
-    let mk_pvar s = Sil.mk_pvar s curr_pname in
+    let mk s = Pvar.mk s curr_pname in
     let add_formal typestate (s, ia, typ) =
-      let pvar = mk_pvar s in
+      let pvar = mk s in
       let ta =
         let origin = TypeOrigin.Formal s in
         TypeAnnotation.from_item_annotation ia origin in
-      TypeState.add_pvar pvar (typ, ta, []) typestate in
+      TypeState.add pvar (typ, ta, []) typestate in
     let get_initial_typestate () =
       let typestate_empty = TypeState.empty Extension.ext in
       IList.fold_left add_formal typestate_empty annotated_signature.Annotations.params in
@@ -117,11 +118,11 @@ struct
         type t = Extension.extension TypeState.t
         let equal = TypeState.equal
         let join = TypeState.join Extension.ext
-        let do_node node typestate =
+        let do_node tenv node typestate =
           State.set_node node;
           let typestates_succ, typestates_exn =
             TypeCheck.typecheck_node
-              Extension.ext calls_this checks idenv get_proc_desc curr_pname curr_pdesc
+              tenv Extension.ext calls_this checks idenv get_proc_desc curr_pname curr_pdesc
               find_canonical_duplicate annotated_signature typestate node linereader in
           if trace then
             IList.iter (fun typestate_succ ->
@@ -135,7 +136,7 @@ struct
       end) in
     let initial_typestate = get_initial_typestate () in
     do_before_dataflow initial_typestate;
-    let transitions = DFTypeCheck.run curr_pdesc initial_typestate in
+    let transitions = DFTypeCheck.run tenv curr_pdesc initial_typestate in
     match transitions (Cfg.Procdesc.get_exit_node curr_pdesc) with
     | DFTypeCheck.Transition (final_typestate, _, _) ->
         do_after_dataflow find_canonical_duplicate final_typestate;
@@ -180,7 +181,7 @@ struct
             check_ret_type = [];
           }, ref false in
       callback1
-        find_canonical_duplicate calls_this' checks' get_proc_desc idenv_pn
+        tenv find_canonical_duplicate calls_this' checks' get_proc_desc idenv_pn
         pname pdesc ann_sig linereader loc in
 
     let module Initializers = struct
@@ -375,7 +376,7 @@ struct
   type extension = unit
   let ext =
     let empty = () in
-    let check_instr _ _ _ ext _ _ = ext in
+    let check_instr _ _ _ _ ext _ _ = ext in
     let join () () = () in
     let pp _ () = () in
     {

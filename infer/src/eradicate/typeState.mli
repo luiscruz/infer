@@ -19,7 +19,8 @@ type 'a ext =
   {
     empty : 'a; (** empty extension *)
     check_instr : (** check the extension for an instruction *)
-      get_proc_desc -> Procname.t -> Cfg.Procdesc.t ->'a -> Sil.instr -> parameters -> 'a;
+      Tenv.t -> get_proc_desc -> Procname.t ->
+      Cfg.Procdesc.t ->'a -> Sil.instr -> parameters -> 'a;
     join : 'a -> 'a -> 'a; (** join two extensions *)
     pp : Format.formatter -> 'a -> unit (** pretty print an extension *)
   }
@@ -30,13 +31,13 @@ type 'a t
 type range = Sil.typ * TypeAnnotation.t * (Location.t list)
 
 val add_id : Ident.t -> range -> 'a t -> 'a t
-val add_pvar : Sil.pvar -> range -> 'a t -> 'a t
+val add : Pvar.t -> range -> 'a t -> 'a t
 val empty : 'a ext -> 'a t
 val equal : 'a t -> 'a t -> bool
 val get_extension : 'a t -> 'a
 val join : 'a ext -> 'a t -> 'a t -> 'a t
 val lookup_id : Ident.t -> 'a t -> range option
-val lookup_pvar : Sil.pvar -> 'a t -> range option
+val lookup_pvar : Pvar.t -> 'a t -> range option
 val pp : 'a ext -> Format.formatter -> 'a t -> unit
 val range_add_locs : range -> (Location.t list) -> range
 val remove_id : Ident.t -> 'a t -> 'a t

@@ -16,23 +16,6 @@ module F = Format
 let (++) = Sil.Int.add
 let (--) = Sil.Int.sub
 
-(** {2 Object representing the status of the join operation} *)
-
-module JoinState : sig
-
-  type mode = Pre | Post
-  val get_footprint : unit -> bool
-  val set_footprint : bool -> unit
-
-end = struct
-
-  type mode = Pre | Post
-  let footprint = ref false (* set to true when we are doing join of footprints *)
-  let get_footprint () = !footprint
-  let set_footprint b = footprint := b
-
-end
-
 (** {2 Utility functions for ids} *)
 
 let can_rename id =
@@ -954,7 +937,7 @@ let rec exp_partial_join (e1: Sil.exp) (e2: Sil.exp) : Sil.exp =
         let e2'' = exp_partial_join e1' e2' in
         Sil.BinOp(binop1, e1'', e2'')
   | Sil.Lvar(pvar1), Sil.Lvar(pvar2) ->
-      if not (Sil.pvar_equal pvar1 pvar2) then (L.d_strln "failure reason 25"; raise IList.Fail)
+      if not (Pvar.equal pvar1 pvar2) then (L.d_strln "failure reason 25"; raise IList.Fail)
       else e1
   | Sil.Lfield(e1, f1, t1), Sil.Lfield(e2, f2, _) ->
       if not (Sil.fld_equal f1 f2) then (L.d_strln "failure reason 26"; raise IList.Fail)
@@ -1029,7 +1012,7 @@ let rec exp_partial_meet (e1: Sil.exp) (e2: Sil.exp) : Sil.exp =
         Rename.extend e1 e2 (Rename.ExtDefault(e1))
       else (L.d_strln "failure reason 34"; raise IList.Fail)
   | Sil.Lvar(pvar1), Sil.Lvar(pvar2) ->
-      if not (Sil.pvar_equal pvar1 pvar2) then (L.d_strln "failure reason 35"; raise IList.Fail)
+      if not (Pvar.equal pvar1 pvar2) then (L.d_strln "failure reason 35"; raise IList.Fail)
       else e1
   | Sil.Lfield(e1, f1, t1), Sil.Lfield(e2, f2, _) ->
       if not (Sil.fld_equal f1 f2) then (L.d_strln "failure reason 36"; raise IList.Fail)

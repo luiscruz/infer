@@ -139,7 +139,7 @@ let check_condition case_zero find_canonical_duplicate curr_pname
       | _ -> false in
     let do_instr = function
       | Sil.Call (_, Sil.Const (Sil.Cfun pn), [_; (Sil.Sizeof(t, _), _)], _, _) when
-          Procname.equal pn SymExec.ModelBuiltins.__instanceof && typ_is_throwable t ->
+          Procname.equal pn ModelBuiltins.__instanceof && typ_is_throwable t ->
           throwable_found := true
       | _ -> () in
     let do_node n =
@@ -271,7 +271,7 @@ let check_constructor_initialization
               | None -> unknown in
             IList.exists
               (function pname, typestate ->
-                let pvar = Sil.mk_pvar
+                let pvar = Pvar.mk
                     (Mangled.from_string (Ident.fieldname_to_string fn))
                     pname in
                 filter_range_opt (TypeState.lookup_pvar pvar typestate))

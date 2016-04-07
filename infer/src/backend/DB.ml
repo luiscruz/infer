@@ -202,6 +202,11 @@ let create_dir dir =
            (L.err "@.ERROR: cannot create directory %s@." dir;
             assert false))
 
+let filename_create_dir fname =
+  let dirname = Filename.dirname fname in
+  if not (Sys.file_exists dirname)
+  then create_dir dirname
+
 let read_whole_file fd =
   let stats = Unix.fstat fd in
   let size = stats.Unix.st_size in
@@ -337,7 +342,7 @@ let infer_start_time = lazy
 let file_was_updated_after_start fname =
   if file_exists fname then
     let file_mtime = file_modified_time fname in
-    file_mtime >= Lazy.force infer_start_time
+    file_mtime > Lazy.force infer_start_time
   else
     (* since file doesn't exist, it wasn't modified *)
     false
