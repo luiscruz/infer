@@ -47,6 +47,40 @@ let callback_check_internal_acessors { Callbacks.proc_desc; proc_name;get_proc_d
   Cfg.Procdesc.iter_instrs do_instr proc_desc
 module L = Logging
 
+let proc_iter_all_overridden_methods f tenv proc_name =
+  let do_super_type tenv super_class =
+
+		match (PatternMatch.type_get_class_name super_class) with
+		| Some mangled_class_name -> (
+	    match super_class with
+			| Sil.Tstruct({ Sil.def_methods }) ->
+	        let is_override pname =
+						Procname.get_method pname = Procname.get_method proc_name &&
+	          (* Procname.equal pname super_proc_name && *)
+	          not (Procname.is_constructor pname) in
+	        IList.iter
+	          (fun pname ->
+	             if is_override pname
+	             then f pname)
+	          def_methods
+	    | _ -> ()
+		)
+		|  _ -> () in
+  match proc_name with
+  | Procname.Java proc_name_java ->
+      let type_name =
+        let class_name = Procname.java_get_class_name proc_name_java in
+        Typename.TN_csu (Csu.Class Csu.Java, Mangled.from_string class_name) in
+      (match Tenv.lookup tenv type_name with
+       | Some curr_struct_typ ->
+           Sil.TypSet.iter
+             (do_super_type tenv)
+             (AndroidFramework.get_all_supertypes (Sil.Tstruct curr_struct_typ) tenv)
+       | None ->
+           ())
+  | _ ->
+      ()
+
 				
 let callback_check_static_method_candidates { Callbacks.proc_desc; proc_name;get_proc_desc; idenv; tenv } =
 		let procname_has_class procname classname = match procname with
