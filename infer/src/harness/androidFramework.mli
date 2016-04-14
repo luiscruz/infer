@@ -65,3 +65,6 @@ val is_throwable : Tenv.t -> Typename.t -> bool
 (** [is_runtime_exception tenv class_name] checks if classname is
     of type java.lang.RuntimeException *)
 val is_runtime_exception : Tenv.t -> Typename.t -> bool
+
+(** return the complete set of superclasses of [typ *)
+val get_all_supertypes : Sil.typ -> Tenv.t -> Sil.TypSet.t

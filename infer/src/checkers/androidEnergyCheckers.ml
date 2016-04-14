@@ -46,7 +46,7 @@ let callback_check_internal_acessors { Callbacks.proc_desc; proc_name;get_proc_d
     | _ -> () in
   Cfg.Procdesc.iter_instrs do_instr proc_desc
 module L = Logging
-
+(*not used *)
 let proc_iter_all_overridden_methods f tenv proc_name =
   let do_super_type tenv super_class =
 
@@ -81,8 +81,19 @@ let proc_iter_all_overridden_methods f tenv proc_name =
   | _ ->
       ()
 
+let get_procname_struct_typ tenv proc_name= 
+	match proc_name with
+	| Procname.Java proc_name_java ->
+		let type_name =
+		  let class_name = Procname.java_get_class_name proc_name_java
+			in
+		  Typename.TN_csu (Csu.Class Csu.Java, Mangled.from_string class_name)
+		in
+		(Tenv.lookup tenv type_name)
+	| _ -> None	
+	
 				
-let callback_check_static_method_candidates { Callbacks.proc_desc; proc_name;get_proc_desc; idenv; tenv } =
+let callback_check_static_method_candidates { Callbacks.proc_desc; proc_name; get_proc_desc; idenv; tenv } =
 		let procname_has_class procname classname = match procname with
 		| Procname.Java pn_java -> (Procname.java_get_class_name pn_java) = classname
 		| _ -> false
@@ -163,8 +174,14 @@ let callback_check_static_method_candidates { Callbacks.proc_desc; proc_name;get
         PatternMatch.proc_iter_overridden_methods (fun _ -> proc_is_overriding:=true) tenv pname;
 				!proc_is_overriding
 			in
+			let procname_get_overrides tenv proc_name =
+				match get_procname_struct_typ tenv proc_name with
+				| Some struct_typ -> (Prover.get_overrides_of tenv (Sil.Tstruct(struct_typ)) proc_name)
+				| _ -> []
+			in
 		if not (Procname.java_is_static proc_name) &&
-			(not (is_override proc_name))
+			(not (is_override proc_name)) &&
+			(IList.length (procname_get_overrides tenv proc_name) = 0)
 		then			
 			let method_should_be_static = 
 				Cfg.Procdesc.fold_instrs (fun acc _ instr -> (acc && (instr_is_static instr))) true proc_desc
