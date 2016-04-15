@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 
 module L = Logging
 
@@ -25,12 +27,22 @@ let compute_icfg tenv ast =
       Printing.log_out "\n Start creating icfg\n";
       let cg = Cg.create () in
       let cfg = Cfg.Node.create_cfg () in
-      IList.iter (CFrontend_declImpl.translate_one_declaration tenv cg cfg ast) decl_list;
+      IList.iter (CFrontend_declImpl.translate_one_declaration tenv cg cfg `DeclTraversal)
+        decl_list;
       Printing.log_out "\n Finished creating icfg\n";
       (cg, cfg)
   | _ -> assert false (* NOTE: Assumes that an AST alsways starts with a TranslationUnitDecl *)
 
+let register_perf_stats_report source_file =
+  let stats_dir = Filename.concat !Config.results_dir Config.frontend_stats_dir_name in
+  let abbrev_source_file = DB.source_file_encoding source_file in
+  let stats_file = Config.perf_stats_prefix ^ "_" ^ abbrev_source_file ^ ".json" in
+  DB.create_dir !Config.results_dir ;
+  DB.create_dir stats_dir ;
+  PerfStats.register_report_at_exit (Filename.concat stats_dir stats_file)
+
 let init_global_state source_file =
+  register_perf_stats_report source_file ;
   Config.curr_language := Config.C_CPP;
   DB.current_source := source_file;
   DB.Results_dir.init ();

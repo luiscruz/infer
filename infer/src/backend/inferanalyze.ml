@@ -8,6 +8,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** Main module for the analysis after the capture phase *)
 
 module L = Logging
@@ -58,7 +60,7 @@ let arg_desc =
         "use file for the err channel"
         ;
         "-iterations",
-        Arg.Int set_iterations,
+        Arg.Set_int Config.iterations,
         Some "n",
         "set the max number of operations for each function, \
          expressed as a multiple of symbolic operations (default n=1)"
@@ -192,7 +194,7 @@ let arg_desc =
         "Add buckets to issue descriptions, useful when developing infer"
         ;
         "-seconds_per_iteration",
-        Arg.Set_float seconds_per_iteration,
+        Arg.Set_float Config.seconds_per_iteration,
         Some "n",
         "set the number of seconds per iteration (default n=30)"
         ;
@@ -202,10 +204,10 @@ let arg_desc =
         "use the multirange subtyping domain"
         ;
         "-symops_per_iteration",
-        Arg.Set_int symops_per_iteration,
+        Arg.Set_int Config.symops_per_iteration,
         Some "n",
         "set the number of symbolic operations per iteration (default n="
-        ^ (string_of_int !symops_per_iteration) ^ ")"
+        ^ (string_of_int !Config.symops_per_iteration) ^ ")"
         ;
         "-tracing",
         Arg.Unit (fun () -> Config.report_runtime_exceptions := true),
@@ -351,7 +353,17 @@ let process_cluster_cmdline fname =
   | Some (nr, cluster) ->
       analyze_cluster (nr - 1)  cluster
 
+let register_perf_stats_report () =
+  let stats_dir = Filename.concat !Config.results_dir Config.backend_stats_dir_name in
+  let cluster = match !cluster_cmdline with Some cl -> "_" ^ cl | None -> "" in
+  let stats_file = Filename.concat stats_dir (Config.perf_stats_prefix ^ cluster ^ ".json") in
+  DB.create_dir !Config.results_dir ;
+  DB.create_dir stats_dir ;
+  PerfStats.register_report_at_exit stats_file
+
 let () =
+  register_perf_stats_report () ;
+
   if !Config.developer_mode then
     Printexc.record_backtrace true;
   print_prolog ();

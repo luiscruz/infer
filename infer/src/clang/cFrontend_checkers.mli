@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 type warning_desc = {
   name : string; (* name for the checker, this will be a kind of bug *)
   description : string; (* Description in the error message *)
@@ -18,6 +20,10 @@ type warning_desc = {
 
 (* Strong Delegate Warning: a property with name delegate should not be declared strong *)
 val strong_delegate_warning : Clang_ast_t.decl_info -> Clang_ast_t.named_decl_info ->
+  Clang_ast_t.obj_c_property_decl_info -> warning_desc option
+
+(* Assing Pointer Warning: a property with a pointer type should not be declared `assign` *)
+val assign_pointer_warning : Clang_ast_t.decl_info -> Clang_ast_t.named_decl_info ->
   Clang_ast_t.obj_c_property_decl_info -> warning_desc option
 
 (* Direct Atomic Property access:

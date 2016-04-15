@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** Module for utility functions for the whole frontend. Includes functions for printing,  *)
 (** for transformations of ast nodes and general utility functions such as  functions on lists *)
 
@@ -126,6 +128,11 @@ sig
   val add_type_from_decl_ref_list : type_ptr_to_sil_type -> Tenv.t -> Clang_ast_t.decl_ref list ->
     unit
 
+  val get_function_decl_with_body : Clang_ast_t.pointer -> Clang_ast_t.decl option
+
+  val get_info_from_decl_ref : Clang_ast_t.decl_ref ->
+    Clang_ast_t.named_decl_info * Clang_ast_t.pointer * Clang_ast_t.type_ptr
+
 end
 
 module General_utils :
@@ -170,9 +177,6 @@ sig
 
   val reset_block_counter : unit -> unit
 
-  val mk_function_decl_info_from_block :
-    Clang_ast_t.block_decl_info -> Clang_ast_t.function_decl_info
-
   val zip: 'a list -> 'b list -> ('a * 'b) list
 
   val list_range: int -> int -> int list
@@ -194,4 +198,5 @@ sig
     Pvar.t
 
   val is_cpp_translation : CFrontend_config.lang -> bool
+
 end

@@ -8,6 +8,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** Module to handle IO. Includes html and xml modules. *)
 
 module F = Format
@@ -148,7 +150,7 @@ struct
   let modified_during_analysis path =
     let fname = get_full_fname path in
     if DB.file_exists fname then
-      DB.file_modified_time fname >= initial_analysis_time
+      DB.file_modified_time fname >= Config.initial_analysis_time
     else false
 
   (** Close an Html file *)

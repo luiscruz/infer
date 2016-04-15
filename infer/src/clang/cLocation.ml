@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** Module for function to retrieve the location (file, line, etc) of instructions *)
 
 open CFrontend_utils
@@ -74,13 +76,27 @@ let clang_to_sil_location clang_loc procdesc_opt =
         | None -> !curr_file, !Config.nLOC in
   Location.{line; col; file; nLOC}
 
+let file_in_project file = match !Config.project_root with
+  | Some root -> string_is_prefix root file
+  | None -> false
+
+let should_do_frontend_check (loc_start, _) =
+  let file =
+    match loc_start.Clang_ast_t.sl_file with
+    | Some f -> f
+    | None -> assert false in
+  let equal_current_source file =
+    DB.source_file_equal (source_file_from_path file) !DB.current_source in
+  equal_current_source file ||
+  (file_in_project file &&  not !CFrontend_config.testing_mode)
+
 (* We translate by default the instructions in the current file.*)
 (* In C++ development, we also translate the headers that are part *)
 (* of the project. However, in testing mode, we don't want to translate *)
 (* the headers because the dot files in the frontend tests should contain nothing *)
 (* else than the source file to avoid conflicts between different versions of the *)
 (* libraries in the CI *)
-let should_translate (loc_start, loc_end) =
+let should_translate (loc_start, loc_end) decl_trans_context =
   let map_path_of pred loc =
     match loc.Clang_ast_t.sl_file with
     | Some f -> pred f
@@ -93,10 +109,6 @@ let should_translate (loc_start, loc_end) =
   let equal_current_source file =
     DB.source_file_equal file !DB.current_source
   in
-  let file_in_project file = match !Config.project_root with
-    | Some root -> string_is_prefix root file
-    | None -> false
-  in
   let file_in_project = map_path_of file_in_project loc_end
                         || map_path_of file_in_project loc_start in
   let file_in_models file = Str.string_match (Str.regexp "^.*/infer/models/cpp/include/") file 0 in
@@ -106,12 +118,12 @@ let should_translate (loc_start, loc_end) =
   || map_file_of equal_current_source loc_end
   || map_file_of equal_current_source loc_start
   || file_in_models
-  || (!CFrontend_config.cxx_experimental && file_in_project
+  || (!CFrontend_config.cxx_experimental && decl_trans_context = `Translation && file_in_project
       && not (!CFrontend_config.testing_mode))
 
-let should_translate_lib source_range =
+let should_translate_lib source_range decl_trans_context =
   not !CFrontend_config.no_translate_libs
-  || should_translate source_range
+  || should_translate source_range decl_trans_context
 
 let get_sil_location_from_range source_range prefer_first =
   let sloc1, sloc2 = source_range in

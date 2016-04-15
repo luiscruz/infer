@@ -8,6 +8,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** Functions for Propositions (i.e., Symbolic Heaps) *)
 
 module L = Logging
@@ -46,7 +48,7 @@ type 'a t =
     foot_pi: pi;  (** abduced pure part *)
   }
 
-exception Cannot_star of ml_loc
+exception Cannot_star of L.ml_loc
 
 (** {2 Basic Functions for Propositions} *)
 

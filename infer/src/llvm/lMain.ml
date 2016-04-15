@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 let arg_desc =
   let options_to_keep = ["-results_dir"; "-project_root"] in
   let desc =
@@ -31,6 +33,14 @@ let print_usage_exit () =
   Arg.usage arg_desc usage;
   exit(1)
 
+let register_perf_stats_report source_file =
+  let stats_dir = Filename.concat !Config.results_dir Config.frontend_stats_dir_name in
+  let abbrev_source_file = DB.source_file_encoding source_file in
+  let stats_file = Config.perf_stats_prefix ^ "_" ^ abbrev_source_file ^ ".json" in
+  DB.create_dir !Config.results_dir ;
+  DB.create_dir stats_dir ;
+  PerfStats.register_report_at_exit (Filename.concat stats_dir stats_file)
+
 let init_global_state source_filename =
   Config.curr_language := Config.C_CPP;
   begin match !Config.project_root with
@@ -39,6 +49,7 @@ let init_global_state source_filename =
         DB.current_source := DB.rel_source_file_from_abs_path project_root
             (filename_to_absolute source_filename)
   end;
+  register_perf_stats_report !DB.current_source ;
   DB.Results_dir.init ();
   Ident.NameGenerator.reset ();
   Config.nLOC := FileLOC.file_get_loc source_filename

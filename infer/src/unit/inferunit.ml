@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** module for running OCaml unit tests *)
 
 let () =
@@ -15,6 +17,7 @@ let () =
     AbstractInterpreterTests.tests;
     AddressTakenTests.tests;
     CopyPropagationTests.tests;
+    ProcCfgTests.tests;
     LivenessTests.tests;
     SchedulerTests.tests;
   ] in

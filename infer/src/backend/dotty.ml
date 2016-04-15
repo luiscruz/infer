@@ -8,6 +8,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 module L = Logging
 module F = Format
 
@@ -511,7 +513,7 @@ let rec dotty_mk_set_links dotnodes sigma p f cycle =
            let nodes_e = select_nodes_exp_lambda dotnodes e lambda in
            let address_struct_id =
              try get_coordinate_id (IList.hd (IList.filter (is_source_node_of_exp e) nodes_e))
-             with exn when exn_not_failure exn -> assert false in
+             with exn when SymOp.exn_not_failure exn -> assert false in
            (* we need to exclude the address node from the sorce of fields. no fields should start from there*)
            let nl'= IList.filter (fun id -> address_struct_id != id) nl in
            let links_from_fields = IList.flatten (IList.map ff nl') in
@@ -875,7 +877,7 @@ let pp_dotty_prop_list_in_path f plist prev_n curr_n =
                  pp_dotty f (Generic_proposition) po None) plist;
     if prev_n <> - 1 then F.fprintf f "\n state%iN ->state%iN\n" prev_n curr_n;
     F.fprintf f "\n } \n"
-  with exn when exn_not_failure exn ->
+  with exn when SymOp.exn_not_failure exn ->
     ()
 
 let pp_dotty_prop fmt (prop, cycle) =
@@ -888,7 +890,7 @@ let pp_dotty_prop fmt (prop, cycle) =
 let dotty_prop_to_str prop cycle =
   try
     Some (pp_to_string pp_dotty_prop (prop, cycle))
-  with exn when exn_not_failure exn -> None
+  with exn when SymOp.exn_not_failure exn -> None
 
 (* create a dotty file with a single proposition *)
 let dotty_prop_to_dotty_file fname prop cycle =
@@ -897,7 +899,7 @@ let dotty_prop_to_dotty_file fname prop cycle =
     let fmt_dot = Format.formatter_of_out_channel out_dot in
     pp_dotty_prop fmt_dot (prop, cycle);
     close_out out_dot
-  with exn when exn_not_failure exn ->
+  with exn when SymOp.exn_not_failure exn ->
     ()
 
 (* this is used only to print a list of prop parsed with the external parser. Basically deprecated.*)
@@ -914,7 +916,7 @@ let pp_proplist_parsed2dotty_file filename plist =
     let fmt = F.formatter_of_out_channel outc in
     F.fprintf fmt "#### Dotty version:  ####@.%a@.@." pp_list plist;
     close_out outc
-  with exn when exn_not_failure exn ->
+  with exn when SymOp.exn_not_failure exn ->
     ()
 
 (********** START of Print interprocedural cfgs in dotty format  *)
@@ -922,7 +924,7 @@ let pp_proplist_parsed2dotty_file filename plist =
 (* channel. You have to compute an interprocedural cfg first               *)
 
 let pp_cfgnodename fmt (n : Cfg.Node.t) =
-  F.fprintf fmt "%d" (Cfg.Node.get_id n)
+  F.fprintf fmt "%d" (Cfg.Node.get_id n :> int)
 
 let pp_etlist fmt etl =
   IList.iter (fun (id, ty) ->
@@ -960,7 +962,7 @@ let pp_cfgnodelabel fmt (n : Cfg.Node.t) =
   let pp_instrs fmt instrs =
     IList.iter (fun i -> F.fprintf fmt " %s\\n " (instr_string i)) instrs in
   let instrs = Cfg.Node.get_instrs n in
-  F.fprintf fmt "%d: %a \\n  %a" (Cfg.Node.get_id n) pp_label n pp_instrs instrs
+  F.fprintf fmt "%d: %a \\n  %a" (Cfg.Node.get_id n :> int) pp_label n pp_instrs instrs
 
 let pp_cfgnodeshape fmt (n: Cfg.Node.t) =
   match Cfg.Node.get_kind n with
@@ -985,7 +987,10 @@ let pp_cfgnode fmt (n: Cfg.Node.t) =
     | Cfg.Node.Exit_node _ when is_exn = true -> (* don't print exception edges to the exit node *)
         ()
     | _ ->
-        F.fprintf fmt "\n\t %d -> %d %s;" (Cfg.Node.get_id n1) (Cfg.Node.get_id n2) color in
+        F.fprintf fmt "\n\t %d -> %d %s;"
+          (Cfg.Node.get_id n1 :> int)
+          (Cfg.Node.get_id n2 :> int)
+          color in
   IList.iter (fun n' -> print_edge n n' false) (Cfg.Node.get_succs n);
   IList.iter (fun n' -> print_edge n n' true) (Cfg.Node.get_exn n)
 
@@ -1056,7 +1061,7 @@ let pp_speclist_to_file (filename : DB.filename) spec_list =
 
 let pp_speclist_dotty_file (filename : DB.filename) spec_list =
   try pp_speclist_to_file filename spec_list
-  with exn when exn_not_failure exn ->
+  with exn when SymOp.exn_not_failure exn ->
     ()
 
 (**********************************************************************)

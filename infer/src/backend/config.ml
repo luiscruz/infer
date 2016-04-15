@@ -37,6 +37,10 @@ let attributes_dir_name = "attributes"
 let captured_dir_name = "captured"
 let sources_dir_name = "sources"
 let specs_dir_name = "specs"
+let perf_stats_prefix = "perf_stats"
+let backend_stats_dir_name = "backend_stats"
+let frontend_stats_dir_name = "frontend_stats"
+let reporting_stats_dir_name = "reporting_stats"
 
 let default_in_zip_results_dir = "infer"
 
@@ -361,6 +365,29 @@ let report_custom_error = from_env_variable "INFER_REPORT_CUSTOM_ERROR"
 let default_failure_name = "ASSERTION_FAILURE"
 
 let analyze_models = from_env_variable "INFER_ANALYZE_MODELS"
+
+(** initial time of the analysis, i.e. when this module is loaded, gotten from Unix.time *)
+let initial_analysis_time = Unix.time ()
+
+let symops_timeout, seconds_timeout =
+  let default_symops_timeout = 333 in
+  let default_seconds_timeout = 10.0 in
+  let long_symops_timeout = 1000 in
+  let long_seconds_timeout = 30.0 in
+  if analyze_models then
+    (* use longer timeouts when analyzing models *)
+    long_symops_timeout, long_seconds_timeout
+  else
+    default_symops_timeout, default_seconds_timeout
+
+(** number of symops to multiply by the number of iterations, after which there is a timeout *)
+let symops_per_iteration = ref symops_timeout
+
+(** number of seconds to multiply by the number of iterations, after which there is a timeout *)
+let seconds_per_iteration = ref seconds_timeout
+
+(** Set the timeout values in seconds and symops, computed as a multiple of the integer parameter *)
+let iterations = ref 1
 
 (** experimental: dynamic dispatch for interface calls only in Java. off by default because of the
     cost *)

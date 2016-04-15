@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** Methods for creating a procdesc from a method or function declaration
     and for resolving a method call and finding the right callee *)
 
@@ -48,5 +50,6 @@ val get_method_name_from_clang : Tenv.t -> CMethod_signature.method_signature op
 val create_procdesc_with_pointer : CContext.t -> Clang_ast_t.pointer -> string option ->
   string -> Clang_ast_t.type_ptr -> Procname.t
 
-val get_method_for_frontend_checks : Cfg.cfg -> Cg.t -> Tenv.t -> string ->
-  Clang_ast_t.decl_info -> Cfg.Procdesc.t
+val get_method_for_frontend_checks : Cfg.cfg -> Cg.t -> Location.t -> Cfg.Procdesc.t
+
+val get_procname_from_cpp_lambda : CContext.t -> Clang_ast_t.decl -> Procname.t

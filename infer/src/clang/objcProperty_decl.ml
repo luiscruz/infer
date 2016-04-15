@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** Process properties by creating their getters and setters in the case that they need to be syntethized *)
 (** or in the case of dynamic. *)
 (* How it works: *)
@@ -21,6 +23,12 @@ let is_strong_property obj_c_property_decl_info =
   let attrs = obj_c_property_decl_info.Clang_ast_t.opdi_property_attributes in
   IList.exists (fun a -> match a with
       | `Strong -> true
+      | _ -> false) attrs
+
+let is_assign_property obj_c_property_decl_info =
+  let attrs = obj_c_property_decl_info.Clang_ast_t.opdi_property_attributes in
+  IList.exists (fun a -> match a with
+      | `Assign -> true
       | _ -> false) attrs
 
 (* Given a list of declarations in an interface returns list of methods *)

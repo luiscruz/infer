@@ -8,6 +8,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 module L = Logging
 module F = Format
 
@@ -15,6 +17,8 @@ module F = Format
 
 (* =============== START of module Node =============== *)
 module Node = struct
+  type id = int
+
   type nodekind =
     | Start_node of proc_desc
     | Exit_node of proc_desc
@@ -25,7 +29,7 @@ module Node = struct
 
   and t = { (** a node *)
     (** unique id of the node *)
-    nd_id : int;
+    nd_id : id;
 
     (** distance to the exit node *)
     mutable nd_dist_exit : int option;
@@ -202,6 +206,9 @@ module Node = struct
   (** Get the unique id of the node *)
   let get_id node = node.nd_id
 
+  (** compare node ids *)
+  let id_compare = int_compare
+
   let get_succs node = node.nd_succs
 
   type node = t
@@ -244,11 +251,33 @@ module Node = struct
 
   let set_proc_desc node proc = node.nd_proc <- Some proc
 
+  (** Get the proc desc of the node *)
+  let get_proc_desc node =
+    match node.nd_proc with
+    | None ->
+        L.out "node_get_proc_desc: at node %d@\n" node.nd_id;
+        assert false
+    | Some proc_desc -> proc_desc
+
   (** Set the successor nodes and exception nodes, and build predecessor links *)
-  let set_succs_exn node succs exn =
+  let set_succs_exn_base node succs exn =
     node.nd_succs <- succs;
     node.nd_exn <- exn;
     IList.iter (fun n -> n.nd_preds <- (node :: n.nd_preds)) succs
+
+  (** Set the successor and exception nodes.
+      If this is a join node right before the exit node, add an extra node in the middle,
+      otherwise nullify and abstract instructions cannot be added after a conditional. *)
+  let set_succs_exn cfg node succs exn =
+    match node.nd_kind, succs with
+    | Join_node, [({nd_kind = (Exit_node _)} as exit_node)] ->
+        let kind = Stmt_node "between_join_and_exit" in
+        let pdesc = get_proc_desc node in
+        let node' = create cfg node.nd_loc kind node.nd_instrs pdesc node.nd_temps in
+        set_succs_exn_base node [node'] exn;
+        set_succs_exn_base node' [exit_node] exn
+    | _ ->
+        set_succs_exn_base node succs exn
 
   (** Get the predecessors of the node *)
   let get_preds node = node.nd_preds
@@ -329,15 +358,6 @@ module Node = struct
 
   let pp f node =
     F.fprintf f "%n" (get_id node)
-
-  (** Get the proc desc of the node *)
-  let get_proc_desc node =
-    let proc_desc = match node.nd_proc with
-      | None ->
-          L.out "node_get_proc_desc: at node %d@\n" node.nd_id;
-          assert false
-      | Some proc_desc -> proc_desc in
-    proc_desc
 
   let proc_desc_from_name cfg proc_name =
     try Some (pdesc_tbl_find cfg proc_name)
@@ -731,7 +751,7 @@ module Node = struct
                 proc_desc_set_start_node resolved_proc_desc new_node;
               if equal node callee_exit_node then
                 proc_desc_set_exit_node resolved_proc_desc new_node;
-              set_succs_exn new_node (loop successors) (loop exn_nodes);
+              set_succs_exn cfg new_node (loop successors) (loop exn_nodes);
               new_node in
           converted_node :: (loop other_node) in
     ignore (loop [callee_start_node]);

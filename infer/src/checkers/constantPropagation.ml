@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 module L = Logging
 
 
@@ -110,7 +112,7 @@ module ConstantFlow = Dataflow.MakeDF(struct
 
       if verbose then
         begin
-          L.stdout "Node %i:" (Cfg.Node.get_id node);
+          L.stdout "Node %i:" (Cfg.Node.get_id node :> int);
           L.stdout "%a" pp constants;
           IList.iter
             (fun instr -> L.stdout "%a@." (Sil.pp_instr pe_text) instr)

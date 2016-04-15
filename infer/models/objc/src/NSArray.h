@@ -11,4 +11,6 @@
 
 @interface NSArray : NSObject
 
+- (NSArray*)arrayByAddingObject:(id)anObject;
+
 @end

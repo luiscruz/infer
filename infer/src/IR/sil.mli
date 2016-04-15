@@ -8,6 +8,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** The Smallfoot Intermediate Language *)
 
 module F = Format
@@ -405,9 +407,6 @@ type instr =
   | Remove_temps of Ident.t list * Location.t (** remove temporaries *)
   | Stackop of stackop * Location.t (** operation on the stack of propsets *)
   | Declare_locals of (Pvar.t * typ) list * Location.t (** declare local variables *)
-  (** jump to a specific cfg node,
-      assuming all the possible target nodes are successors of the current node *)
-  | Goto_node of exp * Location.t
 
 (** Check if an instruction is auxiliary, or if it comes from source instructions. *)
 val instr_is_auxiliary : instr -> bool
@@ -561,6 +560,10 @@ val is_cpp_class : typ -> bool
 
 val is_java_class : typ -> bool
 
+val is_array_of_cpp_class : typ -> bool
+
+val is_pointer_to_cpp_class : typ -> bool
+
 val exp_is_zero : exp -> bool
 
 val exp_is_null_literal : exp -> bool
@@ -666,6 +669,9 @@ val const_kind_equal : const -> const -> bool
 val exp_compare : exp -> exp -> int
 
 val exp_equal : exp -> exp -> bool
+
+(** exp_is_array_index_of index arr returns true is index is an array index of arr. *)
+val exp_is_array_index_of : exp -> exp -> bool
 
 val call_flags_compare : call_flags -> call_flags -> int
 

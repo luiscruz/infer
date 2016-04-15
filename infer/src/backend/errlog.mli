@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** Module for error logs. *)
 
 (** Element of a loc trace *)
@@ -30,7 +32,7 @@ val empty : unit -> t
 type iter_fun =
   (int * int) ->
   Location.t ->
-  ml_loc option ->
+  Logging.ml_loc option ->
   Exceptions.err_kind ->
   bool ->
   Localise.t -> Localise.error_desc -> string ->

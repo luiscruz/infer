@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 module PvarSet = PrettyPrintable.MakePPSet(struct
     type t = Pvar.t
     let compare = Pvar.compare
@@ -40,11 +42,11 @@ module TransferFunctions = struct
           | _ -> astate_acc in
         IList.fold_left add_actual_by_ref astate actuals
     | Sil.Set _ | Letderef _ | Prune _ | Nullify _ | Abstract _ | Remove_temps _ | Stackop _
-    | Declare_locals _ | Goto_node _ ->
+    | Declare_locals _ ->
         astate
 
 end
 
 module Analyzer =
   AbstractInterpreter.Make
-    (ProcCfg.Forward) (Scheduler.ReversePostorder) (Domain) (TransferFunctions)
+    (ProcCfg.Exceptional) (Scheduler.ReversePostorder) (Domain) (TransferFunctions)

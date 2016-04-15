@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 module F = Format
 module L = Logging
 
@@ -43,6 +45,12 @@ let get_field_type_and_annotation fn = function
          Some (t, a)
        with Not_found -> None)
   | _ -> None
+
+(** Return the annotations on the declaring class of [pname]. Only works for Java *)
+let get_declaring_class_annotations pname tenv =
+  match Tenv.proc_extract_declaring_class_typ tenv pname with
+  | Some { Sil.struct_annotations } -> Some struct_annotations
+  | None -> None
 
 let ia_iter f =
   let ann_iter (a, _) = f a in

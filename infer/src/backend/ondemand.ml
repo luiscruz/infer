@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** Module for on-demand analysis. *)
 
 module L = Logging
@@ -189,7 +191,7 @@ let run_proc_analysis ~propagate_exceptions analyze_proc curr_pdesc callee_pdesc
       raise exn
     else
       match exn with
-      | Analysis_failure_exe kind ->
+      | SymOp.Analysis_failure_exe kind ->
           (* in production mode, log the timeout/crash and continue with the summary we had before
              the failure occurred *)
           log_error_and_continue exn kind

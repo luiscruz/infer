@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** Translate declarations **)
 
 module L = Logging
@@ -18,7 +20,7 @@ module type CFrontend_decl = sig
     CModule_type.block_data option -> unit
 
   val translate_one_declaration :
-    Tenv.t -> Cg.t -> Cfg.cfg -> Clang_ast_t.decl -> Clang_ast_t.decl -> unit
+    Tenv.t -> Cg.t -> Cfg.cfg -> CModule_type.decl_trans_context -> Clang_ast_t.decl -> unit
 end
 
 module CFrontend_decl_funct(T: CModule_type.CTranslation) : CFrontend_decl =
@@ -46,7 +48,7 @@ struct
                 (Procname.to_string procname);
               let meth_body_nodes = T.instructions_trans context body extra_instrs exit_node in
               Cfg.Node.add_locals_ret_declaration start_node (Cfg.Procdesc.get_locals procdesc);
-              Cfg.Node.set_succs_exn start_node meth_body_nodes [];
+              Cfg.Node.set_succs_exn cfg start_node meth_body_nodes [];
               Cg.add_defined_node (CContext.get_cg context) (Cfg.Procdesc.get_proc_name procdesc))
        | None -> ())
     with
@@ -61,8 +63,6 @@ struct
         ()
 
   let function_decl tenv cfg cg func_decl block_data_opt =
-    Printing.log_out "\nResetting the goto_labels hashmap...\n";
-    CTrans_utils.GotoLabel.reset_all_labels (); (* C Language Std 6.8.6.1-1 *)
     let captured_vars, outer_context_opt =
       match block_data_opt with
       | Some (outer_context, _, _, captured_vars) -> captured_vars, Some outer_context
@@ -109,11 +109,11 @@ struct
   let process_methods tenv cg cfg curr_class decl_list =
     IList.iter (process_one_method_decl tenv cg cfg curr_class) decl_list
 
-  let should_translate_decl dec =
+  let should_translate_decl dec decl_trans_context =
     let info = Clang_ast_proj.get_decl_tuple dec in
     CLocation.update_curr_file info;
     let source_range = info.Clang_ast_t.di_source_range in
-    let translate_location = CLocation.should_translate_lib source_range in
+    let translate_location = CLocation.should_translate_lib source_range decl_trans_context in
     let always_translate_decl = match dec with
       | Clang_ast_t.FunctionDecl (_, name_info, _, _) ->
           (* named_decl_info.ni_name has name without template parameters.*)
@@ -127,14 +127,16 @@ struct
     translate_location || always_translate_decl
 
   (* Translate one global declaration *)
-  let rec translate_one_declaration tenv cg cfg parent_dec dec =
+  let rec translate_one_declaration tenv cg cfg decl_trans_context dec =
     let open Clang_ast_t in
     (* Run the frontend checkers on this declaration *)
-    CFrontend_errors.run_frontend_checkers_on_decl tenv cg cfg dec;
+    if decl_trans_context = `DeclTraversal then
+      CFrontend_errors.run_frontend_checkers_on_decl cfg cg dec;
+
     (* each procedure has different scope: start names from id 0 *)
     Ident.NameGenerator.reset ();
 
-    (if should_translate_decl dec then
+    (if should_translate_decl dec decl_trans_context then
        match dec with
        | FunctionDecl(_, _, _, _) ->
            function_decl tenv cfg cg dec None
@@ -175,12 +177,11 @@ struct
        | CXXConversionDecl (decl_info, _, _, _, _)
        | CXXDestructorDecl (decl_info, _, _, _, _) ->
            (* di_parent_pointer has pointer to lexical context such as class.*)
-           (* If it's not defined, then it's the same as parent in AST *)
            let class_decl = match decl_info.Clang_ast_t.di_parent_pointer with
              | Some ptr ->
                  Ast_utils.get_decl ptr
              | None ->
-                 Some parent_dec in
+                 assert false in
            (match class_decl with
             | Some (CXXRecordDecl _ as d)
             | Some (ClassTemplateSpecializationDecl _ as d) ->
@@ -194,28 +195,28 @@ struct
        | _ -> ());
     match dec with
     (* Currently C/C++ record decl treated in the same way *)
-    | ClassTemplateSpecializationDecl (decl_info, _, _, _, decl_list, _, _, _)
-    | CXXRecordDecl (decl_info, _, _, _, decl_list, _, _, _)
-    | RecordDecl (decl_info, _, _, _, decl_list, _, _) when not decl_info.di_is_implicit ->
+    | ClassTemplateSpecializationDecl (_, _, _, _, decl_list, _, _, _)
+    | CXXRecordDecl (_, _, _, _, decl_list, _, _, _)
+    | RecordDecl (_, _, _, _, decl_list, _, _) ->
         let is_method_decl decl = match decl with
           | CXXMethodDecl _ | CXXConstructorDecl _ | CXXConversionDecl _
           | CXXDestructorDecl _ | FunctionTemplateDecl _ ->
               true
           | _ -> false in
         let method_decls, no_method_decls = IList.partition is_method_decl decl_list in
-        IList.iter (translate_one_declaration tenv cg cfg dec) no_method_decls;
+        IList.iter (translate_one_declaration tenv cg cfg decl_trans_context) no_method_decls;
         ignore (CTypes_decl.add_types_from_decl_to_tenv tenv dec);
-        IList.iter (translate_one_declaration tenv cg cfg dec) method_decls
+        IList.iter (translate_one_declaration tenv cg cfg decl_trans_context) method_decls
     | EnumDecl _ -> ignore (CEnum_decl.enum_decl dec)
     | LinkageSpecDecl (_, decl_list, _) ->
         Printing.log_out "ADDING: LinkageSpecDecl decl list\n";
-        IList.iter (translate_one_declaration tenv cg cfg dec) decl_list
+        IList.iter (translate_one_declaration tenv cg cfg decl_trans_context) decl_list
     | NamespaceDecl (_, _, decl_list, _, _) ->
-        IList.iter (translate_one_declaration tenv cg cfg dec) decl_list
+        IList.iter (translate_one_declaration tenv cg cfg decl_trans_context) decl_list
     | ClassTemplateDecl (_, _, template_decl_info)
     | FunctionTemplateDecl (_, _, template_decl_info) ->
         let decl_list = template_decl_info.Clang_ast_t.tdi_specializations in
-        IList.iter (translate_one_declaration tenv cg cfg dec) decl_list
+        IList.iter (translate_one_declaration tenv cg cfg decl_trans_context) decl_list
     | _ -> ()
 
 end

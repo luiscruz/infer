@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** Translate declarations **)
 
 module type CFrontend_decl = sig
@@ -14,7 +16,7 @@ module type CFrontend_decl = sig
     CModule_type.block_data option -> unit
 
   val translate_one_declaration : Tenv.t -> Cg.t -> Cfg.cfg ->
-    Clang_ast_t.decl -> Clang_ast_t.decl -> unit
+    CModule_type.decl_trans_context -> Clang_ast_t.decl -> unit
 end
 
 module CFrontend_decl_funct(T: CModule_type.CTranslation) : CFrontend_decl

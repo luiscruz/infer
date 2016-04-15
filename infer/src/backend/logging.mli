@@ -8,6 +8,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** log messages at different levels of verbosity *)
 
 (** type of printable elements *)
@@ -93,6 +95,18 @@ val set_err_formatter : Format.formatter -> unit
 (** Flush the current streams *)
 val flush_streams : unit -> unit
 
+(** Type of location in ml source: __POS__ *)
+type ml_loc = string * int * int * int
+
+(** Convert a ml location to a string *)
+val ml_loc_to_string : ml_loc -> string
+
+(** Pretty print a location of ml source *)
+val pp_ml_loc_opt : Format.formatter -> ml_loc option -> unit
+
+(** Print stack trace and throw assert false *)
+val assert_false : ml_loc -> 'a
+
 (** print a warning with information of the position in the ml source where it oririnated.
     use as: warning_position "description" (try assert false with Assert_failure x -> x); *)
 val warning_position: string -> ml_loc -> unit
@@ -137,4 +151,4 @@ val log_progress_file : unit -> unit
 val log_progress_procedure : unit -> unit
 
 (** Progress bar: log a timeout event if in developer mode. *)
-val log_progress_timeout_event : failure_kind -> unit
+val log_progress_timeout_event : SymOp.failure_kind -> unit

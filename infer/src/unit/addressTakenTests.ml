@@ -7,10 +7,12 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 module F = Format
 
 module TestInterpreter = AnalyzerTester.Make
-    (ProcCfg.Forward)
+    (ProcCfg.Exceptional)
     (Scheduler.ReversePostorder)
     (AddressTaken.Domain)
     (AddressTaken.TransferFunctions)

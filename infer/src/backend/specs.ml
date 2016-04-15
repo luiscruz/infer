@@ -8,6 +8,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** Specifications and spec table *)
 
 module L = Logging
@@ -141,8 +143,8 @@ end
 
 module Visitedset =
   Set.Make (struct
-    type t = int * int list
-    let compare (node_id1, _) (node_id2, _) = int_compare node_id1 node_id2
+    type t = Cfg.Node.id * int list
+    let compare (node_id1, _) (node_id2, _) = Cfg.Node.id_compare node_id1 node_id2
   end)
 
 let visited_str vis =
@@ -290,7 +292,8 @@ type call_stats = CallStats.t
 (** Execution statistics *)
 type stats =
   { stats_time: float; (** Analysis time for the procedure *)
-    stats_failure: failure_kind option; (** what type of failure stopped the analysis (if any) *)
+    stats_failure:
+      SymOp.failure_kind option; (** what type of failure stopped the analysis (if any) *)
     stats_calls: Cg.in_out_calls; (** num of procs calling, and called *)
     symops: int; (** Number of SymOp's throughout the whole analysis of the function *)
     mutable nodes_visited_fp : IntSet.t; (** Nodes visited during the footprint phase *)
@@ -321,7 +324,7 @@ type payload =
 
 type summary =
   { dependency_map: dependency_map_t;  (** maps children procs to timestamp as last seen at the start of an analysys phase for this proc *)
-    nodes: int list; (** ids of cfg nodes of the procedure *)
+    nodes: Cfg.Node.id list; (** ids of cfg nodes of the procedure *)
     phase: phase; (** in FOOTPRINT phase or in RE_EXECUTION PHASE *)
     payload: payload;  (** payload containing the result of some analysis *)
     sessions: int ref; (** Session number: how many nodes went trough symbolic execution *)
@@ -349,7 +352,7 @@ let pp_time whole_seconds fmt t =
   else F.fprintf fmt "%f s" t
 
 let pp_failure_kind_opt fmt failure_kind_opt = match failure_kind_opt with
-  | Some failure_kind -> pp_failure_kind fmt failure_kind
+  | Some failure_kind -> SymOp.pp_failure_kind fmt failure_kind
   | None -> F.fprintf fmt "NONE"
 
 let pp_stats err_log whole_seconds fmt stats =

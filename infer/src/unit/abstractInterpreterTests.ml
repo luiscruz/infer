@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 module F = Format
 
 (** Test the generic abstract interpreter by using a simple path counting domain. Path counting is
@@ -55,7 +57,7 @@ end
 
 
 module TestInterpreter = AnalyzerTester.Make
-    (ProcCfg.Forward)
+    (ProcCfg.Normal)
     (Scheduler.ReversePostorder)
     (PathCountDomain)
     (PathCountTransferFunctions)
@@ -158,6 +160,21 @@ let tests =
                      [invariant "T"]);
               invariant "T"]);
       invariant "T";
+    ];
+    "try",
+    [
+      Try (
+        [
+          invariant "1"; (* we expect the try block to be visited *)
+        ],
+        [
+          invariant "_|_"; (* but not the catch block *)
+        ],
+        [
+          invariant "1"; (* we expect the finally block to be visited *)
+        ]
+      );
+      invariant "1"
     ];
   ] |> TestInterpreter.create_tests in
   "analyzer_tests_suite">:::test_list

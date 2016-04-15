@@ -8,6 +8,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** Symbolic Execution *)
 
 module L = Logging
@@ -538,10 +540,11 @@ let resolve_virtual_pname tenv prop actuals callee_pname call_flags : Procname.t
   let get_receiver_typ pname fallback_typ =
     match pname with
     | Procname.Java pname_java ->
-        (try
-           let receiver_typ_str = Procname.java_get_class_name pname_java in
-           Sil.Tptr (Tenv.lookup_java_typ_from_string tenv receiver_typ_str, Sil.Pk_pointer)
-         with Tenv.Cannot_convert_string_to_typ _ -> fallback_typ)
+        begin
+          match Tenv.proc_extract_declaring_class_typ tenv pname_java with
+          | Some struct_typ -> Sil.Tptr (Tstruct struct_typ, Pk_pointer)
+          | None -> fallback_typ
+        end
     | _ ->
         fallback_typ in
   let receiver_types_equal pname actual_receiver_typ =
@@ -1044,11 +1047,11 @@ let rec sym_exec tenv current_pdesc _instr (prop_: Prop.normal Prop.t) path
       begin
         match summary_opt with
         | None ->
-            let ret_typ_str = Procname.java_get_return_type callee_pname_java in
             let ret_typ =
-              match Tenv.lookup_java_typ_from_string tenv ret_typ_str with
-              | Sil.Tstruct _ as typ -> Sil.Tptr (typ, Sil.Pk_pointer)
-              | typ -> typ in
+              match Tenv.proc_extract_return_typ tenv callee_pname_java with
+              | Some (Sil.Tstruct _ as typ) -> Sil.Tptr (typ, Pk_pointer)
+              | Some typ -> typ
+              | None -> Sil.Tvoid in
             exec_skip_call resolved_pname ret_typ
         | Some summary when call_should_be_skipped resolved_pname summary ->
             exec_skip_call resolved_pname summary.Specs.attributes.ProcAttributes.ret_type
@@ -1057,7 +1060,7 @@ let rec sym_exec tenv current_pdesc _instr (prop_: Prop.normal Prop.t) path
       end
 
   | Sil.Call (ret_ids,
-              Sil.Const (Sil.Cfun ((Procname.Java _) as callee_pname)),
+              Sil.Const (Sil.Cfun ((Procname.Java callee_pname_java) as callee_pname)),
               actual_params, loc, call_flags) ->
       do_error_checks (Paths.Path.curr_node path) instr current_pname current_pdesc;
       let norm_prop, norm_args = normalize_params current_pname prop_ actual_params in
@@ -1071,15 +1074,11 @@ let rec sym_exec tenv current_pdesc _instr (prop_: Prop.normal Prop.t) path
           skip_call norm_prop path pname loc ret_ids (Some ret_type) url_handled_args in
         match Specs.get_summary pname with
         | None ->
-            let ret_typ_str = match pname with
-              | Procname.Java pname_java ->
-                  Procname.java_get_return_type pname_java
-              | _ ->
-                  "unknown_return_type" in
             let ret_typ =
-              match Tenv.lookup_java_typ_from_string tenv ret_typ_str with
-              | Sil.Tstruct _ as typ -> Sil.Tptr (typ, Sil.Pk_pointer)
-              | typ -> typ in
+              match Tenv.proc_extract_return_typ tenv callee_pname_java with
+              | Some (Sil.Tstruct _ as typ) -> Sil.Tptr (typ, Pk_pointer)
+              | Some typ -> typ
+              | None -> Sil.Tvoid in
             exec_skip_call ret_typ
         | Some summary when call_should_be_skipped pname summary ->
             exec_skip_call summary.Specs.attributes.ProcAttributes.ret_type
@@ -1191,18 +1190,6 @@ let rec sym_exec tenv current_pdesc _instr (prop_: Prop.normal Prop.t) path
       ret_old_path [prop']
   | Sil.Stackop _ -> (* this should be handled at the propset level *)
       assert false
-  | Sil.Goto_node (node_e, _) ->
-      let n_node_e, prop = check_arith_norm_exp current_pname node_e prop_ in
-      begin
-        match n_node_e with
-        | Sil.Const (Sil.Cint i) ->
-            let node_id = Sil.Int.to_int i in
-            State.set_goto_node node_id;
-            [(prop, path)]
-        | _ -> (* target not known, do nothing as the next nodes
-                  are set to the possible targets by the front-end *)
-            [(prop, path)]
-      end
 and diverge prop path =
   State.add_diverging_states (Paths.PathSet.from_renamed_list [(prop, path)]); (* diverge *)
   []
@@ -1213,10 +1200,10 @@ and instrs ?(mask_errors=false) tenv pdesc instrs ppl =
   let exe_instr instr (p, path) =
     L.d_str "Executing Generated Instruction "; Sil.d_instr instr; L.d_ln ();
     try sym_exec tenv pdesc instr p path
-    with exn when exn_not_failure exn && mask_errors ->
+    with exn when SymOp.exn_not_failure exn && mask_errors ->
       let err_name, _, ml_source, _ , _, _, _ = Exceptions.recognize_exception exn in
       let loc = (match ml_source with
-          | Some ml_loc -> "at " ^ (ml_loc_to_string ml_loc)
+          | Some ml_loc -> "at " ^ (L.ml_loc_to_string ml_loc)
           | None -> "") in
       L.d_warning
         ("Generated Instruction Failed with: " ^
@@ -1410,7 +1397,7 @@ and check_variadic_sentinel
     let letderef = Sil.Letderef (tmp_id_deref, lexp, typ, loc) in
     try
       instrs tenv pdesc [letderef] result
-    with e when exn_not_failure e ->
+    with e when SymOp.exn_not_failure e ->
       if not fails_on_nil then
         let deref_str = Localise.deref_str_nil_argument_in_variadic_method proc_name nargs i in
         let err_desc =

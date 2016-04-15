@@ -40,7 +40,6 @@ OCAMLBUILD_OPTIONS = \
                      -cflags -strict-sequence \
                      -cflags -w,$(OCAML_FATAL_WARNINGS)-4-9-40-41-42-45-48-50 \
                      -tag-line "<*{clang/clang_ast_*,backend/jsonbug_*}>: warn(-27-32-35-39)" \
-                     -tag-line "not <**/{config,iList,utils}.*>: open(Utils)" \
                      -pkgs atdgen,extlib,oUnit,str,unix,yojson,zip
 
 ifeq (@ENABLE_OCAML_ANNOT@,yes)
@@ -131,7 +130,7 @@ endif
 DEPENDENCIES = IR backend checkers eradicate harness \
 	facebook/checkers facebook/checkers/graphql facebook/scripts $(EXTRA_DEPS)
 
-OCAMLBUILD = ocamlbuild $(OCAMLBUILD_OPTIONS) -j 0 $(addprefix -I , $(DEPENDENCIES))
+OCAMLBUILD = ocamlbuild $(OCAMLBUILD_OPTIONS) -j $(NCPU) $(addprefix -I , $(DEPENDENCIES))
 
 .PHONY: all java clang llvm unit checkCopyright build_java build_clang build_llvm build_unit \
 	build_checkCopyright java_annotations clang_annotations llvm_annotations \
@@ -180,7 +179,8 @@ byte: init $(INFERPRINT_ATDGEN_STUBS) $(CLANG_ATDGEN_STUBS) $(INFER_CLANG_FCP_MI
 	  $(INFERPRINT_MAIN).byte \
 	  $(INFERJAVA_MAIN).byte \
 	  $(INFERCLANG_MAIN).byte \
-	  $(INFERUNIT_MAIN).byte
+	  $(INFERUNIT_MAIN).byte \
+	  $(CHECKCOPYRIGHT_MAIN).byte
 
 test_build: init $(INFERPRINT_ATDGEN_STUBS) $(CLANG_ATDGEN_STUBS) $(INFER_CLANG_FCP_MIRRORED_FILES)
 	$(OCAMLBUILD) -build-dir $(TEST_BUILD_DIR) $(JAVA_OCAMLBUILD_OPTIONS) \
@@ -189,7 +189,21 @@ test_build: init $(INFERPRINT_ATDGEN_STUBS) $(CLANG_ATDGEN_STUBS) $(INFER_CLANG_
 	  $(INFERPRINT_MAIN).byte \
 	  $(INFERJAVA_MAIN).byte \
 	  $(INFERCLANG_MAIN).byte \
-	  $(INFERUNIT_MAIN).byte
+	  $(INFERUNIT_MAIN).byte \
+	  $(CHECKCOPYRIGHT_MAIN).byte
+
+$(DEPENDENCIES_DIR)/ocamldot/ocamldot:
+	$(MAKE) -C $(DEPENDENCIES_DIR)/ocamldot
+
+roots:=Inferanalyze CMain JMain Inferprint
+src_dirs:=$(shell find * -type d)
+src_files:=$(shell find $(src_dirs) -regex '.*\.ml\(i\)*' -not -path facebook/scripts/eradicate_stats.ml)
+inc_flags:=$(foreach dir,$(src_dirs),-I $(dir))
+root_flags:=$(foreach root,$(roots),-r $(root))
+mod_dep.dot: $(DEPENDENCIES_DIR)/ocamldot/ocamldot $(src_files)
+	ocamldep.opt $(inc_flags) $(src_files) \
+	| $(DEPENDENCIES_DIR)/ocamldot/ocamldot -lr $(root_flags) \
+        > mod_dep.dot
 
 ifeq (@ENABLE_OCAML_ANNOT@,yes)
 java_annotations: build_java
@@ -300,12 +314,15 @@ test_clean:
 
 clean:
 	$(REMOVE_DIR) $(BUILD_DIR)
+	$(REMOVE) $(ETC_DIR)/clang_ast.dict
 ifeq (@ENABLE_OCAML_ANNOT@,yes)
 	$(REMOVE_DIR) $(ANNOT_DIR)
 endif
 	$(REMOVE) backend/version.ml
 	$(REMOVE) backend/version.ml.tmp.*
+	$(REMOVE) backend/jsonbug_{j,t}.ml{,i}
 	$(REMOVE) $(INFERJAVA_BIN) $(INFERCLANG_BIN) $(INFERLLVM_BIN) $(INFERUNIT_BIN)
-	$(REMOVE) $(CHECKCOPYRIGHT_BIN)
+	$(REMOVE) $(INFERANALYZE_BIN) $(INFERPRINT_BIN) $(CHECKCOPYRIGHT_BIN)
 	$(REMOVE) $(CLANG_ATDGEN_STUBS)
 	$(REMOVE) $(INFER_CLANG_FCP_MIRRORED_FILES)
+	$(REMOVE) mod_dep.dot

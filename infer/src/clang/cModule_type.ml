@@ -7,12 +7,16 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 type block_data = CContext.t * Clang_ast_t.type_ptr * Procname.t * (Pvar.t * Sil.typ) list
 
 type instr_type = [
   | `ClangStmt of Clang_ast_t.stmt
   | `CXXConstructorInit of Clang_ast_t.cxx_ctor_initializer
 ]
+
+type decl_trans_context = [ `DeclTraversal | `Translation ]
 
 module type CTranslation =
 sig
@@ -25,5 +29,5 @@ module type CFrontend = sig
     block_data option -> unit
 
   val translate_one_declaration : Tenv.t -> Cg.t -> Cfg.cfg ->
-    Clang_ast_t.decl -> Clang_ast_t.decl -> unit
+    decl_trans_context -> Clang_ast_t.decl -> unit
 end

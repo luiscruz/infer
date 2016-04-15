@@ -11,4 +11,10 @@
 
 @interface NSDictionary : NSObject
 
+- (id)objectForKey:(id)aKey;
+- (id)objectForKeyedSubscript:(id)key;
+
++ (instancetype)dictionary;
++ (instancetype)dictionaryWithObject:(id)object forKey:(id)key;
+
 @end

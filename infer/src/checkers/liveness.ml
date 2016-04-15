@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 module F = Format
 module L = Logging
 
@@ -40,7 +42,7 @@ module TransferFunctions = struct
     | Sil.Set (lhs_exp, _, rhs_exp, _) ->
         exp_add_live lhs_exp astate
         |> exp_add_live rhs_exp
-    | Sil.Prune (exp, _, _, _) | Sil.Goto_node (exp, _) ->
+    | Sil.Prune (exp, _, _, _) ->
         exp_add_live exp astate
     | Sil.Call (ret_ids, call_exp, params, _, _) ->
         IList.fold_right
@@ -59,9 +61,10 @@ end
 
 module Analyzer =
   AbstractInterpreter.Make
-    (ProcCfg.Backward(ProcCfg.Forward))
+    (ProcCfg.Backward(ProcCfg.Exceptional))
     (Scheduler.ReversePostorder)
     (Domain)
     (TransferFunctions)
 
-let checker { Callbacks.proc_desc; } = ignore(Analyzer.exec_pdesc proc_desc)
+let checker { Callbacks.proc_desc; tenv; } =
+  ignore(Analyzer.exec_pdesc (ProcData.make proc_desc tenv))

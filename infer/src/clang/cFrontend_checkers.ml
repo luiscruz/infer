@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 open CFrontend_utils
 
 (* To create a new checker you should: *)
@@ -84,6 +86,32 @@ let dec_body_eventually atomic_pred param dec =
   | _ -> false
 
 (* === Warnings on properties === *)
+
+(* Assing Pointer Warning: a property with a pointer type should not be declared `assign` *)
+let assign_pointer_warning decl_info pname obj_c_property_decl_info =
+  let open Clang_ast_t in
+  let condition =
+    let has_assign_property () = ObjcProperty_decl.is_assign_property obj_c_property_decl_info in
+    let is_pointer_type () =
+      let type_ptr = obj_c_property_decl_info.opdi_type_ptr in
+      let raw_ptr = Clang_ast_types.type_ptr_to_clang_pointer type_ptr in
+      match Clang_ast_main.PointerMap.find raw_ptr !CFrontend_config.pointer_type_index with
+      | MemberPointerType _ | ObjCObjectPointerType _ | BlockPointerType _ -> true
+      | TypedefType (type_info, _) -> type_info.ti_raw = "id"
+      | exception Not_found -> false
+      | _ -> false in
+    has_assign_property() && is_pointer_type () in
+  if condition then
+    Some
+      { name = "ASSIGN_POINTER_WARNING";
+        description =
+          Printf.sprintf
+            "Property `%s` is a pointer type marked with the `assign` attribute"
+            pname.ni_name;
+        suggestion = "Use a different attribute like `strong` or `weak`.";
+        loc = location_from_dinfo decl_info;
+      }
+  else None
 
 (* Strong Delegate Warning: a property with name delegate should not be declared strong *)
 let strong_delegate_warning decl_info pname obj_c_property_decl_info =

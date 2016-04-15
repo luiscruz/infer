@@ -8,6 +8,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** Functions for Propositions (i.e., Symbolic Heaps) *)
 
 open Sil
@@ -29,7 +31,7 @@ type struct_init_mode =
   | No_init
   | Fld_init
 
-exception Cannot_star of ml_loc
+exception Cannot_star of Logging.ml_loc
 
 (** {2 Basic Functions for propositions} *)
 

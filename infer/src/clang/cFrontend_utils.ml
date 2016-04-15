@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** Module for utility functions for the whole frontend. Includes functions for printing,  *)
 (** for transformations of ast nodes and general utility functions such as  functions on lists *)
 
@@ -370,6 +372,26 @@ struct
       ignore (type_ptr_to_sil_type tenv (`DeclPtr dr.Clang_ast_t.dr_decl_pointer)) in
     IList.iter add_elem decl_ref_list
 
+  let get_function_decl_with_body decl_ptr =
+    let open Clang_ast_t in
+    let decl_opt = get_decl decl_ptr in
+    let decl_ptr' = match decl_opt with
+      | Some (FunctionDecl (_, _, _, fdecl_info))
+      | Some (CXXMethodDecl (_, _, _, fdecl_info, _))
+      | Some (CXXConstructorDecl (_, _, _, fdecl_info, _))
+      | Some (CXXConversionDecl (_, _, _, fdecl_info, _))
+      | Some (CXXDestructorDecl (_, _, _, fdecl_info, _)) ->
+          fdecl_info.Clang_ast_t.fdi_decl_ptr_with_body
+      | _ -> Some decl_ptr in
+    if decl_ptr' = (Some decl_ptr) then decl_opt
+    else get_decl_opt decl_ptr'
+
+  let get_info_from_decl_ref decl_ref =
+    let name_info = match decl_ref.Clang_ast_t.dr_name with Some ni -> ni | _ -> assert false in
+    let decl_ptr = decl_ref.Clang_ast_t.dr_decl_pointer in
+    let type_ptr = match decl_ref.Clang_ast_t.dr_type_ptr with Some tp -> tp | _ -> assert false in
+    name_info, decl_ptr, type_ptr
+
 (*
   let rec getter_attribute_opt attributes =
     match attributes with
@@ -504,18 +526,6 @@ struct
   let reset_block_counter () =
     block_counter := 0
 
-  let mk_function_decl_info_from_block block_decl_info =
-    {
-      Clang_ast_t.fdi_storage_class = None;
-      Clang_ast_t.fdi_is_inline = true; (* This value should not matter as we don't use it*)
-      Clang_ast_t.fdi_is_module_private = true; (* This value should not matter as we don't use it*)
-      Clang_ast_t.fdi_is_pure = false; (* This value should not matter as we don't use it*)
-      Clang_ast_t.fdi_is_delete_as_written = false; (* This value should not matter as we don't use it*)
-      Clang_ast_t.fdi_decls_in_prototype_scope =[];
-      Clang_ast_t.fdi_parameters = block_decl_info.Clang_ast_t.bdi_parameters;
-      Clang_ast_t.fdi_body = block_decl_info.Clang_ast_t.bdi_body;
-    }
-
   let rec zip xs ys =
     match xs, ys with
     | [], _
@@ -613,6 +623,7 @@ struct
 
   let is_cpp_translation language =
     language = CFrontend_config.CPP || language = CFrontend_config.OBJCPP
+
 end
 
 

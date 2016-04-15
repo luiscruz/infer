@@ -7,6 +7,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 module F = Format
 module L = Logging
 
@@ -20,18 +22,24 @@ module Domain = struct
   (* return true if the key-value bindings in [rhs] are a subset of the key-value bindings in
      [lhs] *)
   let (<=) ~lhs ~rhs =
-    Var.Map.for_all
-      (fun k v ->
-         try Var.var_equal v (Var.Map.find k lhs)
-         with Not_found -> false)
-      rhs
+    if lhs == rhs
+    then true
+    else
+      Var.Map.for_all
+        (fun k v ->
+           try Var.var_equal v (Var.Map.find k lhs)
+           with Not_found -> false)
+        rhs
 
   let join astate1 astate2 =
-    let keep_if_same _ v1_opt v2_opt = match v1_opt, v2_opt with
-      | Some v1, Some v2 ->
-          if Var.var_equal v1 v2 then Some v1 else None
-      | _ -> None in
-    Var.Map.merge keep_if_same astate1 astate2
+    if astate1 == astate2
+    then astate1
+    else
+      let keep_if_same _ v1_opt v2_opt = match v1_opt, v2_opt with
+        | Some v1, Some v2 ->
+            if Var.var_equal v1 v2 then Some v1 else None
+        | _ -> None in
+      Var.Map.merge keep_if_same astate1 astate2
 
   let widen ~prev ~next ~num_iters:_=
     join prev next
@@ -106,16 +114,17 @@ module TransferFunctions = struct
         (* this should never happen *)
         assert false
     | Sil.Set _ | Sil.Prune _ | Sil.Nullify _ | Sil.Abstract _ | Sil.Remove_temps _
-    | Sil.Declare_locals _ | Sil.Goto_node _ | Sil.Stackop _ ->
+    | Sil.Declare_locals _ | Sil.Stackop _ ->
         (* none of these can assign to program vars or logical vars *)
         astate
 end
 
 module Analyzer =
   AbstractInterpreter.Make
-    (ProcCfg.Forward)
+    (ProcCfg.Exceptional)
     (Scheduler.ReversePostorder)
     (Domain)
     (TransferFunctions)
 
-let checker { Callbacks.proc_desc; } = ignore(Analyzer.exec_pdesc proc_desc)
+let checker { Callbacks.proc_desc; tenv; } =
+  ignore(Analyzer.exec_pdesc (ProcData.make proc_desc tenv))

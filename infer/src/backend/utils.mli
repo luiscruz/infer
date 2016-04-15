@@ -16,6 +16,12 @@
     functions and builtin equality. Use IList instead. *)
 module List : sig end
 
+(** initial process times *)
+val initial_times : Unix.process_times
+
+(** precise time of day at the start of the analysis *)
+val initial_timeofday : float
+
 (** Compare police: generic compare disabled. *)
 val compare : unit
 
@@ -67,15 +73,6 @@ module IntMap : Map.S with type key = int
 module StringMap : Map.S with type key = string
 
 (** {2 Printing} *)
-
-(** Type of location in ml source: __POS__ *)
-type ml_loc = string * int * int * int
-
-(** Convert a ml location to a string *)
-val ml_loc_to_string : ml_loc -> string
-
-(** Pretty print a location of ml source *)
-val pp_ml_loc_opt : Format.formatter -> ml_loc option -> unit
 
 (** Colors supported in printing *)
 type color = Black | Blue | Green | Orange | Red
@@ -151,79 +148,6 @@ val pp_current_time : Format.formatter -> unit -> unit
 (** Print the time in seconds elapsed since the beginning of the execution of the current command. *)
 val pp_elapsed_time : Format.formatter -> unit -> unit
 
-(** {2 SymOp and Failures: units of symbolic execution} *)
-
-(** initial time of the analysis, i.e. when this module is loaded, gotten from Unix.time *)
-val initial_analysis_time : float
-
-(** number of symops to multiply by the number of iterations, after which there is a timeout *)
-val symops_per_iteration : int ref
-
-(** number of seconds to multiply by the number of iterations, after which there is a timeout *)
-val seconds_per_iteration : float ref
-
-(** Timeout in seconds for each function *)
-val get_timeout_seconds : unit -> float
-
-(** Set the timeout values in seconds and symops, computed as a multiple of the integer parameter *)
-val set_iterations : int -> unit
-
-type failure_kind =
-  | FKtimeout (* max time exceeded *)
-  | FKsymops_timeout of int (* max symop's exceeded *)
-  | FKrecursion_timeout of int (* max recursion level exceeded *)
-  | FKcrash of string (* uncaught exception or failed assertion *)
-
-(** Timeout exception *)
-exception Analysis_failure_exe of failure_kind
-
-(** check that the exception is not a timeout exception *)
-val exn_not_failure : exn -> bool
-
-val pp_failure_kind : Format.formatter -> failure_kind -> unit
-
-(** Count the number of symbolic operations *)
-module SymOp : sig
-  (** Internal state of the module *)
-  type t
-
-  (** if the wallclock alarm has expired, raise a timeout exception *)
-  val check_wallclock_alarm : unit -> unit
-
-  (** Return the time remaining before the wallclock alarm expires *)
-  val get_remaining_wallclock_time : unit -> float
-
-  (** Return the total number of symop's since the beginning *)
-  val get_total : unit -> int
-
-  (** Count one symop *)
-  val pay : unit -> unit
-
-  (** Reset the total number of symop's *)
-  val reset_total : unit -> unit
-
-  (** Restore the old state. *)
-  val restore_state : t -> unit
-
-  (** Return the old state, and revert the current state to the initial one.
-      If keep_symop_total is true, share the total counter. *)
-  val save_state : keep_symop_total:bool -> t
-
-  (** Reset the counter and activate the alarm *)
-  val set_alarm : unit -> unit
-
-  (** Set the wallclock alarm checked at every pay() *)
-  val set_wallclock_alarm : float -> unit
-
-  (** set the handler for the wallclock timeout *)
-  val set_wallclock_timeout_handler : (unit -> unit) -> unit
-
-  (** De-activate the alarm *)
-  val unset_alarm : unit -> unit
-
-  (** Unset the wallclock alarm checked at every pay() *)
-  val unset_wallclock_alarm : unit -> unit
-end
 
 module Arg : sig
   include module type of Arg with type spec = Arg.spec
@@ -380,6 +304,3 @@ val run_in_re_execution_mode : ('a -> 'b) -> 'a -> 'b
 (** [set_reference_and_call_function ref val f x] calls f x with ref set to val.
     Restore the initial value also in case of exception. *)
 val set_reference_and_call_function : 'a ref -> 'a -> ('b -> 'c) -> 'b -> 'c
-
-(** Pritn stack trace and throw assert false *)
-val assert_false : ml_loc -> 'a

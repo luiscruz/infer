@@ -7,10 +7,12 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 (** Handle timeout events *)
 
 (** Execute the function up to a given timeout. *)
-val exe_timeout : ('a -> unit) -> 'a -> failure_kind option
+val exe_timeout : ('a -> unit) -> 'a -> SymOp.failure_kind option
 
 (** Resume a previously suspended timeout. *)
 val resume_previous_timeout : unit -> unit

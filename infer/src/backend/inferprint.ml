@@ -8,6 +8,8 @@
  * of patent rights can be found in the PATENTS file in the same directory.
  *)
 
+open! Utils
+
 module L = Logging
 module F = Format
 open Jsonbug_j
@@ -386,7 +388,7 @@ let summary_values top_proc_set summary =
     logscale (c1 * in_calls + c2 * out_calls) in
 
   let pp_failure failure =
-    pp_to_string pp_failure_kind failure in
+    pp_to_string SymOp.pp_failure_kind failure in
 
 
   { vname = Procname.to_string proc_name;
@@ -1138,7 +1140,16 @@ end
 (* warning: computing top procedures iterates over summaries twice *)
 let compute_top_procedures = ref false
 
+let register_perf_stats_report () =
+  let stats_dir = Filename.concat !Config.results_dir Config.reporting_stats_dir_name in
+  let stats_file = Filename.concat stats_dir (Config.perf_stats_prefix ^ ".json") in
+  DB.create_dir !Config.results_dir ;
+  DB.create_dir stats_dir ;
+  PerfStats.register_report_at_exit stats_file
+
 let () =
+  register_perf_stats_report () ;
+
   Config.developer_mode := true;
   Config.print_using_diff := true;
   handle_source_file_copy_option ();
