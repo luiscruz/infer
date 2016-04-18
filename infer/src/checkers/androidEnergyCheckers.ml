@@ -93,34 +93,9 @@ let get_procname_struct_typ tenv proc_name=
 	| _ -> None	
 	
 	
-let struct_typ_is_super_method_of_pname struct_typ java_pname=
-	(*comparison between pnames must ignore class name *)
-	IList.fold_left (fun acc e -> acc || ((Procname.java_get_method java_pname) = (Procname.get_method e))) false struct_typ.Sil.def_methods
 	
-let struct_typ_get_def_method_by_name struct_typ method_name = 
-	IList.find (fun def_method -> (method_name = (Procname.get_method def_method))) struct_typ.Sil.def_methods
-	
-let get_struct_typ_of_typename tenv typename=
-	Tenv.lookup tenv typename
 
-let get_overriden_method tenv java_pname=
-	let rec get_overriden_method_in_superclasses java_pname superclasses=
-		match superclasses with
-		| superclass::superclasses_tail -> (
-			match get_struct_typ_of_typename tenv superclass with
-			| Some struct_typ -> 
-				if struct_typ_is_super_method_of_pname struct_typ java_pname then
-					Some (struct_typ_get_def_method_by_name struct_typ (Procname.java_get_method java_pname))
-				else
-					(get_overriden_method_in_superclasses java_pname (superclasses_tail@struct_typ.superclasses))
-			| None -> get_overriden_method_in_superclasses java_pname superclasses_tail
-		)
-		| [] -> None
-	in
-	match (Tenv.proc_extract_declaring_class_typ tenv java_pname) with
-	| Some proc_struct_typ ->
-		(get_overriden_method_in_superclasses java_pname proc_struct_typ.superclasses)
-	| _ -> None
+
 				
 let callback_check_static_method_candidates { Callbacks.proc_desc; proc_name; get_proc_desc; idenv; tenv } =
 		let procname_has_class procname classname = match procname with
@@ -205,7 +180,7 @@ let callback_check_static_method_candidates { Callbacks.proc_desc; proc_name; ge
       let pname_is_overriden tenv pname = (*Todo: this is not efficient -- fold approach should be used*)
 				match pname with
 				| Procname.Java java_pname ->(
-					match get_overriden_method tenv java_pname with
+					match Tenv.get_overriden_method tenv java_pname with
 						| Some _ -> true
 						| None -> false
 				)
